@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Shifts ──────────────────────────────────────────────────────────────────
+// 5 fixed shifts at the Austrian dialysis centre
+model Shift {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique  // e.g. "MWF Morning"
+  schedule   String    // "MWF" | "TThS"
+  timeOfDay  String    // "morning" | "noon" | "evening"
+  sortOrder  Int       @default(0)
+
+  patients   Patient[]
+  providers  Provider[]
+
+  @@map("shifts")
+}
+
+// ─── Patients ─────────────────────────────────────────────────────────────────
+model Patient {
+  id             Int       @id @default(autoincrement())
+  name           String
+  pin            String    @unique  // 6-digit PIN, stored as bcrypt hash
+  pinIndexHash   String    @unique  // HMAC-SHA256(pin) — used for O(1) login lookup
+  shiftId        Int
+  enrollmentDate DateTime  @db.Date
+  isActive       Boolean   @default(true)
+  droppedOutAt   DateTime? @db.Date
+  dryWeight      Decimal?  @db.Decimal(5, 2)  // target dry weight (kg)
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  shift          Shift     @relation(fields: [shiftId], references: [id])
+  promResponses  PromResponse[]
+  clinicalData   ClinicalData[]
+
+  @@map("patients")
+}
+
+// ─── Providers ───────────────────────────────────────────────────────────────
+model Provider {
+  id           Int      @id @default(autoincrement())
+  name         String
+  username     String   @unique
+  passwordHash String
+  role         String   // "admin" | "provider"
+  shiftId      Int?     // null for admins
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  shift        Shift?   @relation(fields: [shiftId], references: [id])
+
+  @@map("providers")
+}
+
+// ─── PROM Responses ───────────────────────────────────────────────────────────
+// Patient-Reported Outcome Measures — 3 scores on 1-5 school-grade scale
+// (1 = optimal, 5 = very bad)
+model PromResponse {
+  id                  Int      @id @default(autoincrement())
+  patientId           Int
+  sessionDate         DateTime @db.Date
+  studyWeek           Int      // 1-12
+  timepointReference  String   // "yesterday" | "arrival" | "now"
+  fluidStatusScore    Int      // 1-5: general wellbeing, bad in either direction
+  thirstScore         Int      // 1-5
+  fluidOverloadScore  Int      // 1-5
+  submittedAt         DateTime @default(now())
+
+  patient             Patient  @relation(fields: [patientId], references: [id])
+
+  @@unique([patientId, sessionDate])
+  @@index([sessionDate])
+  @@index([patientId, studyWeek])
+  @@map("prom_responses")
+}
+
+// ─── Clinical Data ────────────────────────────────────────────────────────────
+// Entered by clinical staff during rounds
+model ClinicalData {
+  id                       Int      @id @default(autoincrement())
+  patientId                Int
+  sessionDate              DateTime @db.Date
+  preDialysisWeight        Decimal? @db.Decimal(5, 2)  // kg
+  interdialyticWeightGain  Decimal? @db.Decimal(4, 2)  // kg
+  systolicBp               Int?     // mmHg
+  diastolicBp              Int?     // mmHg
+  recordedAt               DateTime @default(now())
+
+  patient                  Patient  @relation(fields: [patientId], references: [id])
+
+  @@unique([patientId, sessionDate])
+  @@index([sessionDate])
+  @@map("clinical_data")
+}
+
+// ─── Study Configuration ──────────────────────────────────────────────────────
+// Single row — insert once, update study start date to kick off week calculation
+model StudyConfig {
+  id             Int      @id @default(autoincrement())
+  studyStartDate DateTime @db.Date
+  studyName      String   @default("HARMONY")
+  updatedAt      DateTime @updatedAt
+
+  @@map("study_config")
+}

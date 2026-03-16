@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-size: 18px; /* Slightly larger base for clinical/elderly use */
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900;
+  }
+}
+
+@layer components {
+  /* Large buttons for elderly patients */
+  .btn-patient {
+    @apply flex items-center justify-center rounded-2xl font-bold text-white text-2xl
+           min-h-[5rem] px-8 py-4 shadow-lg transition-all duration-150
+           focus:outline-none focus:ring-4 focus:ring-offset-2 active:scale-95;
+  }
+
+  .btn-primary {
+    @apply bg-blue-700 hover:bg-blue-800 focus:ring-blue-400;
+  }
+
+  .btn-success {
+    @apply bg-teal-600 hover:bg-teal-700 focus:ring-teal-400;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-700 focus:ring-red-400;
+  }
+
+  .btn-secondary {
+    @apply bg-slate-600 hover:bg-slate-700 focus:ring-slate-400;
+  }
+
+  /* Score buttons — 1-5 school grade scale */
+  .score-btn {
+    @apply flex flex-col items-center justify-center rounded-2xl border-4 text-3xl font-black
+           min-h-[7rem] min-w-[7rem] transition-all duration-150 cursor-pointer
+           focus:outline-none focus:ring-4 focus:ring-offset-2 active:scale-95;
+  }
+
+  .score-btn-unselected {
+    @apply border-slate-300 bg-white text-slate-600 hover:border-blue-400 hover:bg-blue-50;
+  }
+
+  .score-btn-selected {
+    @apply border-blue-700 bg-blue-700 text-white shadow-lg;
+  }
+}
