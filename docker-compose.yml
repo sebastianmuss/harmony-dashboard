@@ -1,0 +1,54 @@
+services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       harmony
+      POSTGRES_USER:     harmony
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U harmony -d harmony"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Next.js app ──────────────────────────────────────────────────────────────
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL:    postgresql://harmony:${POSTGRES_PASSWORD}@db:5432/harmony
+      NEXTAUTH_URL:    https://${DOMAIN}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NODE_ENV:        production
+    expose:
+      - "3000"
+
+  # ── Caddy (reverse proxy + automatic HTTPS) ──────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN}
+    depends_on:
+      - app
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
