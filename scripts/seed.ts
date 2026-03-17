@@ -80,17 +80,11 @@ function studyWeekFor(date: Date, studyStart: Date): number | null {
   return week > 12 ? null : week
 }
 
-// ── Austrian first/last names ─────────────────────────────────────────────────
-const FIRST_NAMES_MALE = ['Franz', 'Johann', 'Karl', 'Hans', 'Peter', 'Rudolf', 'Wilhelm', 'Ernst', 'Friedrich', 'Helmut',
-  'Gerhard', 'Werner', 'Herbert', 'Kurt', 'Erich', 'Josef', 'Walter', 'Otto', 'Heinrich', 'Manfred']
-const FIRST_NAMES_FEMALE = ['Maria', 'Elisabeth', 'Anna', 'Katharina', 'Helga', 'Ingrid', 'Brigitte', 'Monika', 'Christine',
-  'Gertrude', 'Rosa', 'Hildegard', 'Margit', 'Elfriede', 'Hermine', 'Johanna', 'Ilse', 'Edith', 'Renate', 'Hannelore']
-const LAST_NAMES = ['Huber', 'Müller', 'Gruber', 'Bauer', 'Wagner', 'Steiner', 'Moser', 'Mayer', 'Lehner', 'Winkler',
-  'Hofer', 'Pichler', 'Berger', 'Eder', 'Fischer', 'Schmid', 'Wimmer', 'Mayr', 'Brunner', 'Wolf',
-  'Reiter', 'Schwarz', 'Leitner', 'Stadler', 'Fuchs', 'Schneider', 'Aigner', 'Weiss', 'Köller', 'Hinteregger']
-
 const PROVIDER_FIRST = ['Stefan', 'Andreas', 'Christian', 'Markus', 'Thomas', 'Sabine', 'Barbara', 'Claudia', 'Eva', 'Sandra']
 const PROVIDER_LAST = ['Brandl', 'Kirchner', 'Hollerer', 'Reindl', 'Zangl', 'Pointner', 'Fink', 'Strasser', 'Koller', 'Dober']
+
+// Centers: first 3 shifts → Feldbach, last 2 → Vienna
+const SHIFT_CENTERS = ['Feldbach', 'Feldbach', 'Feldbach', 'Vienna', 'Vienna']
 
 // ── Main seed ─────────────────────────────────────────────────────────────────
 async function main() {
@@ -128,12 +122,12 @@ async function main() {
 
   // ── Providers ──────────────────────────────────────────────────────────────
   console.log('  Creating providers…')
-  // 2 admins
+  // 2 admins (no center — admins see all)
   const ADMIN_PASS = await bcrypt.hash('harmony-admin-2024', 12)
   await prisma.provider.createMany({
     data: [
-      { name: 'Dr. Theresa Hollerer', username: 'admin', passwordHash: ADMIN_PASS, role: 'admin', shiftId: null },
-      { name: 'Dr. Michael Reindl',   username: 'reindl', passwordHash: ADMIN_PASS, role: 'admin', shiftId: null },
+      { name: 'Dr. Theresa Hollerer', username: 'admin',  passwordHash: ADMIN_PASS, role: 'admin', shiftId: null, center: null },
+      { name: 'Dr. Michael Reindl',   username: 'reindl', passwordHash: ADMIN_PASS, role: 'admin', shiftId: null, center: null },
     ],
   })
   // 1 provider per shift — password: harmony-staff-2024
@@ -144,6 +138,7 @@ async function main() {
     passwordHash: STAFF_PASS,
     role: 'provider' as const,
     shiftId: shift.id,
+    center: SHIFT_CENTERS[i] ?? 'Feldbach',
   }))
   await prisma.provider.createMany({ data: providerData })
   console.log(`  ✓ Created 2 admins + 5 providers\n`)
@@ -160,17 +155,10 @@ async function main() {
     return pin
   }
 
-  const usedNames = new Set<string>()
-  function uniqueName(gender: 'M' | 'F'): string {
-    const firsts = gender === 'M' ? FIRST_NAMES_MALE : FIRST_NAMES_FEMALE
-    let name: string
-    let attempts = 0
-    do {
-      name = `${pick(firsts)} ${pick(LAST_NAMES)}`
-      attempts++
-    } while (usedNames.has(name) && attempts < 100)
-    usedNames.add(name)
-    return name
+  // Sequential patient codes: HMY-0001, HMY-0002, …
+  let patientCodeCounter = 1
+  function nextPatientCode(): string {
+    return `HMY-${String(patientCodeCounter++).padStart(4, '0')}`
   }
 
   // 2 patients will be dropped out (early dropout simulation)
@@ -179,11 +167,11 @@ async function main() {
 
   const createdPatients: { id: number; shiftId: number; shiftSchedule: string; enrollmentDate: Date; droppedOut: boolean }[] = []
 
-  for (const shift of shifts) {
+  for (const [shiftIdx, shift] of shifts.entries()) {
+    const center = SHIFT_CENTERS[shiftIdx] ?? 'Feldbach'
     const patientsInShift = PER_SHIFT
     for (let i = 0; i < patientsInShift; i++) {
-      const gender: 'M' | 'F' = Math.random() > 0.5 ? 'M' : 'F'
-      const name = uniqueName(gender)
+      const patientCode = nextPatientCode()
       const rawPin = uniquePin()
       const [pinHash, indexHash] = await Promise.all([
         bcrypt.hash(rawPin, 10),
@@ -199,10 +187,12 @@ async function main() {
 
       const patient = await prisma.patient.create({
         data: {
-          name,
+          patientCode,
           pin: pinHash,
           pinIndexHash: indexHash,
           shiftId: shift.id,
+          center,
+          dialysisSchedule: shift.schedule, // use shift schedule as default
           enrollmentDate,
           isActive: !isDropout,
           droppedOutAt,

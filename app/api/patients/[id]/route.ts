@@ -17,8 +17,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json()
 
   const update: Record<string, unknown> = {}
-  if (body.name !== undefined) update.name = body.name
+  if (body.patientCode !== undefined) update.patientCode = body.patientCode.toUpperCase()
   if (body.shiftId !== undefined) update.shiftId = body.shiftId
+  if (body.center !== undefined) update.center = body.center
+  if (body.dialysisSchedule !== undefined) update.dialysisSchedule = body.dialysisSchedule
+  if (body.customDialysisDays !== undefined) update.customDialysisDays = body.customDialysisDays ?? null
   if (body.enrollmentDate !== undefined) update.enrollmentDate = new Date(body.enrollmentDate)
   if (body.isActive !== undefined) update.isActive = body.isActive
   if (body.droppedOutAt !== undefined) update.droppedOutAt = body.droppedOutAt ? new Date(body.droppedOutAt) : null

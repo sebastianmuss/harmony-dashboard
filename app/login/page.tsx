@@ -11,7 +11,7 @@ export default function LoginPage() {
   const { data: session, status } = useSession()
   const [mode, setMode] = useState<LoginMode>('pin')
   const [pin, setPin] = useState('')
-  const [patientName, setPatientName] = useState('')
+  const [patientCode, setPatientCode] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -46,14 +46,14 @@ export default function LoginPage() {
 
   async function submitPin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!patientName.trim()) { setError('Bitte geben Sie Ihren Namen ein.'); return }
+    if (!patientCode.trim()) { setError('Bitte geben Sie Ihre Patientenkennung ein.'); return }
     if (pin.length < 6) { setError('Bitte geben Sie Ihre vollständige 6-stellige PIN ein.'); return }
     setError(null)
     setLoading(true)
-    const result = await signIn('patient-login', { name: patientName.trim(), pin, redirect: false })
+    const result = await signIn('patient-login', { patientCode: patientCode.trim().toUpperCase(), pin, redirect: false })
     setLoading(false)
     if (result?.error) {
-      setError('Name oder PIN nicht erkannt. Bitte wenden Sie sich an das Pflegepersonal.')
+      setError('Patientenkennung oder PIN nicht erkannt. Bitte wenden Sie sich an das Pflegepersonal.')
       setPin('')
     }
   }
@@ -111,19 +111,20 @@ export default function LoginPage() {
           <form onSubmit={submitPin} className="space-y-6">
             <div className="text-center">
               <h2 className="text-3xl font-bold text-slate-800">Willkommen</h2>
-              <p className="text-slate-500 mt-1">Name und PIN eingeben</p>
+              <p className="text-slate-500 mt-1">Kennung und PIN eingeben</p>
             </div>
 
-            {/* Name input */}
+            {/* Patient code input */}
             <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">Ihr Name</label>
+              <label className="block text-sm font-semibold text-slate-600 mb-1">Patientenkennung</label>
               <input
                 type="text"
-                autoComplete="name"
-                value={patientName}
-                onChange={(e) => setPatientName(e.target.value)}
-                className="w-full border-2 border-slate-300 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-blue-500 transition"
-                placeholder="z.B. Maria Muster"
+                autoComplete="off"
+                value={patientCode}
+                onChange={(e) => setPatientCode(e.target.value.toUpperCase())}
+                className="w-full border-2 border-slate-300 rounded-xl px-4 py-3 text-lg font-mono tracking-widest focus:outline-none focus:border-blue-500 transition"
+                placeholder="HMY-0001"
+                maxLength={8}
               />
             </div>
 
@@ -183,7 +184,7 @@ export default function LoginPage() {
               </button>
               <button
                 type="submit"
-                disabled={!patientName.trim() || pin.length < 6 || loading}
+                disabled={!patientCode.trim() || pin.length < 6 || loading}
                 className="flex-[2] h-14 rounded-2xl bg-blue-700 text-white text-xl font-bold hover:bg-blue-800 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {loading ? 'Anmeldung…' : 'Anmelden'}

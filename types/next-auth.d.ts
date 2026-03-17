@@ -13,6 +13,10 @@ declare module 'next-auth' {
       shiftName?: string
       shiftSchedule?: string
       patientId?: number
+      patientCode?: string
+      dialysisSchedule?: string
+      customDialysisDays?: string | null
+      center?: string | null
       providerId?: number
     }
   }
@@ -26,6 +30,10 @@ declare module 'next-auth/jwt' {
     shiftName?: string
     shiftSchedule?: string
     patientId?: number
+    patientCode?: string
+    dialysisSchedule?: string
+    customDialysisDays?: string | null
+    center?: string | null
     providerId?: number
   }
 }

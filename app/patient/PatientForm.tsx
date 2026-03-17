@@ -12,7 +12,7 @@ import { computeBoxplot, groupByRelativeWeek } from '@/lib/boxplot'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Props {
-  patientName: string
+  patientCode: string
   studyWeek: number
   timepoint: TimepointReference
   timepointLabel: string
@@ -46,7 +46,7 @@ interface ClinicalEntry {
 // ── i18n ──────────────────────────────────────────────────────────────────────
 const T = {
   de: {
-    hello: (name: string) => `Hallo, ${name}!`,
+    hello: (code: string) => `Hallo, ${code}!`,
     studyWeek: (w: number) => `HARMONY-Studie · Woche ${w}/12`,
     logout: 'Abmelden',
     timepointLabel: 'Bewertungszeitraum',
@@ -106,7 +106,7 @@ const T = {
     dryWeightLabel: 'Zielgewicht',
   },
   en: {
-    hello: (name: string) => `Hello, ${name}!`,
+    hello: (code: string) => `Hello, ${code}!`,
     studyWeek: (w: number) => `HARMONY Study · Week ${w}/12`,
     logout: 'Log out',
     timepointLabel: 'Reference period',
@@ -511,7 +511,7 @@ function ScoreChip({ score }: { score: number }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function PatientForm({
-  patientName,
+  patientCode,
   studyWeek,
   timepoint,
   timepointLabel,
@@ -566,7 +566,7 @@ export default function PatientForm({
     return (
       <div className="bg-blue-800 px-6 py-4 flex items-center justify-between shadow">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-white">{t.hello(patientName)}</h1>
+          <h1 className="text-xl sm:text-2xl font-black text-white">{t.hello(patientCode)}</h1>
           <p className="text-blue-200 text-base">{t.studyWeek(studyWeek)}</p>
         </div>
         <div className="flex items-center gap-2">

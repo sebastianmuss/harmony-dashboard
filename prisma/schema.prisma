@@ -24,18 +24,21 @@ model Shift {
 
 // ─── Patients ─────────────────────────────────────────────────────────────────
 model Patient {
-  id             Int       @id @default(autoincrement())
-  name           String
-  pin            String    @unique  // 6-digit PIN, stored as bcrypt hash
-  pinIndexHash   String    @unique  // HMAC-SHA256(pin) — used for O(1) login lookup
-  shiftId        Int
-  enrollmentDate DateTime  @db.Date
-  isActive       Boolean   @default(true)
-  droppedOutAt   DateTime? @db.Date
-  dryWeight      Decimal?  @db.Decimal(5, 2)  // target dry weight (kg)
-  notes          String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id                  Int       @id @default(autoincrement())
+  patientCode         String    @unique  // HMY-XXXX pseudonymous identifier
+  pin                 String    @unique  // 6-digit PIN, stored as bcrypt hash
+  pinIndexHash        String    @unique  // HMAC-SHA256(pin) — used for O(1) login lookup
+  shiftId             Int
+  center              String    @default("Feldbach")  // "Feldbach" | "Vienna"
+  dialysisSchedule    String    @default("MWF")       // "MWF" | "TThS" | "custom"
+  customDialysisDays  String?                         // comma-separated day numbers e.g. "1,3,5" when schedule="custom"
+  enrollmentDate      DateTime  @db.Date
+  isActive            Boolean   @default(true)
+  droppedOutAt        DateTime? @db.Date
+  dryWeight           Decimal?  @db.Decimal(5, 2)  // target dry weight (kg)
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   shift          Shift     @relation(fields: [shiftId], references: [id])
   promResponses  PromResponse[]
@@ -52,6 +55,7 @@ model Provider {
   passwordHash String
   role         String   // "admin" | "provider"
   shiftId      Int?     // null for admins
+  center       String?  // "Feldbach" | "Vienna" — null means access to all centers (admins)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

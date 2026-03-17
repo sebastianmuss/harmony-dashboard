@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
 
   const responses = await prisma.promResponse.findMany({
     where,
-    include: { patient: { select: { name: true, shiftId: true } } },
+    include: { patient: { select: { patientCode: true, shiftId: true, center: true } } },
     orderBy: [{ patientId: 'asc' }, { sessionDate: 'asc' }],
   })
   return NextResponse.json(responses)

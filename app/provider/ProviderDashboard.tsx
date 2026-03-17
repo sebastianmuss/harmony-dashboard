@@ -33,12 +33,15 @@ interface ClinicalEntry {
 
 interface PatientData {
   id: number
-  name: string
+  patientCode: string
+  center: string
   shiftName: string
   schedule: string
+  customDialysisDays: string | null
   enrollmentDate: string
   dryWeight: number | null
   isLongGapToday: boolean
+  onHDToday: boolean
   submittedToday: boolean
   todayProm: PromEntry | null
   todayClinical: ClinicalEntry | null
@@ -433,7 +436,7 @@ function PromEntryModal({ patient, timepoint, lang, onClose, onSaved }: {
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div>
             <h3 className="text-lg font-bold text-slate-800">
-              {lang === 'de' ? 'PROM erfassen' : 'Enter PROM'} — {patient.name}
+              {lang === 'de' ? 'PROM erfassen' : 'Enter PROM'} — {patient.patientCode}
             </h3>
             {tpLabel && <p className="text-sm text-slate-500 mt-0.5">{lang === 'de' ? 'Zeitpunkt:' : 'Timepoint:'} <span className="font-semibold">{tpLabel}</span></p>}
           </div>
@@ -503,10 +506,13 @@ function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, o
       <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => setExpanded((e) => !e)}>
         <div className={clsx('w-3 h-3 rounded-full flex-shrink-0', patient.submittedToday ? 'bg-green-500' : 'bg-slate-300')} />
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-slate-800 truncate">{patient.name}</p>
+          <p className="font-mono font-bold text-blue-700 truncate">{patient.patientCode}</p>
           <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span>{patient.center}</span>
+            <span>·</span>
             <span>{patient.promHistory.length} sessions</span>
             {patient.isLongGapToday && <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-semibold">Long gap</span>}
+            {!patient.onHDToday && <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-semibold">{lang === 'de' ? 'Kein HD-Tag' : 'No HD today'}</span>}
           </div>
         </div>
         {patient.submittedToday && patient.todayProm && (
@@ -648,6 +654,13 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
     return true
   }) ?? []
 
+  // Group by center for display
+  const centers = [...new Set(filteredPatients.map((p) => p.center))].sort()
+  const patientsByCenter = centers.map((center) => ({
+    center,
+    patients: filteredPatients.filter((p) => p.center === center),
+  }))
+
   const submittedCount = data?.patients.filter((p) => p.submittedToday).length ?? 0
   const totalCount = data?.patients.length ?? 0
   const tpLabel = data?.currentTimepoint ? (TIMEPOINT_LABELS[data.currentTimepoint]?.[lang] ?? data.currentTimepoint) : '—'
@@ -723,7 +736,7 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
               ))}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-4">
               {filteredPatients.length === 0 && (
                 <div className="bg-white rounded-xl p-8 text-center text-slate-400">
                   {filter === 'pending'
@@ -731,16 +744,25 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
                     : (lang === 'de' ? 'Keine Patienten gefunden.' : 'No patients found.')}
                 </div>
               )}
-              {filteredPatients.map((patient) => (
-                <PatientCard
-                  key={patient.id}
-                  patient={patient}
-                  today={data.today}
-                  currentTimepoint={data.currentTimepoint}
-                  studyStartDate={data.studyStartDate}
-                  lang={lang}
-                  onDataSaved={fetchData}
-                />
+              {patientsByCenter.map(({ center, patients }) => (
+                <div key={center}>
+                  {centers.length > 1 && (
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 px-1">{center}</h3>
+                  )}
+                  <div className="space-y-2">
+                    {patients.map((patient) => (
+                      <PatientCard
+                        key={patient.id}
+                        patient={patient}
+                        today={data.today}
+                        currentTimepoint={data.currentTimepoint}
+                        studyStartDate={data.studyStartDate}
+                        lang={lang}
+                        onDataSaved={fetchData}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </>
