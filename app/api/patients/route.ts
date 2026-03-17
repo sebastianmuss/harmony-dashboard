@@ -17,7 +17,9 @@ export async function GET(req: NextRequest) {
 
   const where: Record<string, unknown> = {}
   if (session.user.role === 'provider') {
-    where.shiftId = session.user.shiftId
+    // Providers see only their center's patients
+    if (session.user.center) where.center = session.user.center
+    else where.shiftId = session.user.shiftId
   } else if (shiftId) {
     where.shiftId = parseInt(shiftId)
   }
@@ -28,7 +30,7 @@ export async function GET(req: NextRequest) {
       shift: { select: { id: true, name: true, schedule: true, timeOfDay: true } },
       _count: { select: { promResponses: true } },
     },
-    orderBy: [{ shiftId: 'asc' }, { name: 'asc' }],
+    orderBy: [{ center: 'asc' }, { patientCode: 'asc' }],
   })
 
   // Never return PIN hashes to the client
@@ -43,10 +45,10 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { name, pin, shiftId, enrollmentDate, notes } = body
+  const { patientCode, pin, shiftId, enrollmentDate, center, dialysisSchedule, customDialysisDays, notes } = body
 
-  if (!name || !pin || !shiftId || !enrollmentDate) {
-    return NextResponse.json({ error: 'name, pin, shiftId, and enrollmentDate are required' }, { status: 400 })
+  if (!patientCode || !pin || !shiftId || !enrollmentDate) {
+    return NextResponse.json({ error: 'patientCode, pin, shiftId, and enrollmentDate are required' }, { status: 400 })
   }
 
   if (!validatePin(pin)) {
@@ -60,10 +62,13 @@ export async function POST(req: NextRequest) {
 
   const patient = await prisma.patient.create({
     data: {
-      name,
+      patientCode: patientCode.toUpperCase(),
       pin: pinHash,
       pinIndexHash: indexHash,
       shiftId,
+      center: center ?? 'Feldbach',
+      dialysisSchedule: dialysisSchedule ?? 'MWF',
+      customDialysisDays: customDialysisDays ?? null,
       enrollmentDate: new Date(enrollmentDate),
       notes: notes ?? null,
     },

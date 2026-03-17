@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { getCurrentStudyWeek, getTimepointForWeek, isLongGapSession } from '@/lib/study'
+import { getCurrentStudyWeek, getTimepointForWeek, isLongGapSession, isDialysisDay } from '@/lib/study'
 
 // ── GET /api/provider/shift-data ──────────────────────────────────────────────
 // Returns today's shift patient list with PROM history + clinical data
@@ -13,8 +13,10 @@ export async function GET() {
   }
 
   const shiftId = session.user.shiftId
-  if (!shiftId && session.user.role !== 'admin') {
-    return NextResponse.json({ error: 'No shift assigned' }, { status: 400 })
+  const providerCenter = session.user.center ?? null
+
+  if (!shiftId && !providerCenter && session.user.role !== 'admin') {
+    return NextResponse.json({ error: 'No shift or center assigned' }, { status: 400 })
   }
 
   const config = await prisma.studyConfig.findFirst()
@@ -24,9 +26,18 @@ export async function GET() {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  // Get patients for this shift
+  // Build patient filter: providers see their center's patients; admins see all
+  const patientWhere: Record<string, unknown> = { isActive: true }
+  if (session.user.role === 'provider') {
+    if (providerCenter) {
+      patientWhere.center = providerCenter
+    } else if (shiftId) {
+      patientWhere.shiftId = shiftId
+    }
+  }
+
   const patients = await prisma.patient.findMany({
-    where: { shiftId: shiftId ?? undefined, isActive: true },
+    where: patientWhere,
     include: {
       shift: { select: { name: true, schedule: true } },
       promResponses: {
@@ -53,7 +64,7 @@ export async function GET() {
         },
       },
     },
-    orderBy: { name: 'asc' },
+    orderBy: [{ center: 'asc' }, { patientCode: 'asc' }],
   })
 
   const enrichedPatients = patients.map((patient) => {
@@ -65,16 +76,20 @@ export async function GET() {
       (c) => new Date(c.sessionDate).toDateString() === today.toDateString()
     )
 
-    const isLongGap = isLongGapSession(today, patient.shift.schedule)
+    const isLongGap = isLongGapSession(today, patient.dialysisSchedule !== 'custom' ? patient.dialysisSchedule : patient.shift.schedule)
+    const onHDToday = isDialysisDay(today, patient.dialysisSchedule, patient.customDialysisDays)
 
     return {
       id: patient.id,
-      name: patient.name,
+      patientCode: patient.patientCode,
+      center: patient.center,
       shiftName: patient.shift.name,
-      schedule: patient.shift.schedule,
+      schedule: patient.dialysisSchedule,
+      customDialysisDays: patient.customDialysisDays,
       enrollmentDate: patient.enrollmentDate,
       dryWeight: patient.dryWeight ? Number(patient.dryWeight) : null,
       isLongGapToday: isLongGap,
+      onHDToday,
       submittedToday: !!todayProm,
       todayProm: todayProm ?? null,
       todayClinical: todayClinical ?? null,

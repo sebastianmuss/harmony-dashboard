@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { name, username, password, role, shiftId } = body
+  const { name, username, password, role, shiftId, center } = body
 
   if (!name || !username || !password || !role) {
     return NextResponse.json({ error: 'name, username, password, and role are required' }, { status: 400 })
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   const passwordHash = await bcrypt.hash(password, 12)
 
   const provider = await prisma.provider.create({
-    data: { name, username, passwordHash, role, shiftId: shiftId ?? null },
+    data: { name, username, passwordHash, role, shiftId: shiftId ?? null, center: center ?? null },
     include: { shift: { select: { name: true } } },
   })
 

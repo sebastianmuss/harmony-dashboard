@@ -20,6 +20,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.username !== undefined) update.username = body.username
   if (body.role !== undefined) update.role = body.role
   if (body.shiftId !== undefined) update.shiftId = body.shiftId ?? null
+  if (body.center !== undefined) update.center = body.center ?? null
   if (body.isActive !== undefined) update.isActive = body.isActive
   if (body.password !== undefined) {
     if (body.password.length < 8) {

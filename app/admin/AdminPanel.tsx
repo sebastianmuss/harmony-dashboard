@@ -18,8 +18,11 @@ interface Shift {
 
 interface Patient {
   id: number
-  name: string
+  patientCode: string
   shiftId: number
+  center: string
+  dialysisSchedule: string
+  customDialysisDays: string | null
   enrollmentDate: string
   isActive: boolean
   droppedOutAt: string | null
@@ -35,9 +38,18 @@ interface Provider {
   username: string
   role: string
   shiftId: number | null
+  center: string | null
   isActive: boolean
   shift: { name: string } | null
 }
+
+const CENTERS = ['Feldbach', 'Vienna']
+const SCHEDULE_OPTIONS = [
+  { value: 'MWF',    label: 'MMF (Mo-Mi-Fr)' },
+  { value: 'TThS',   label: 'DiDoSa (Di-Do-Sa)' },
+  { value: 'custom', label: 'Individuell' },
+]
+const DAY_LABELS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 
 interface DashboardData {
   recruitment: { total: number; active: number; droppedOut: number }
@@ -177,10 +189,15 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [editPatient, setEditPatient] = useState<Patient | null>(null)
-  const [form, setForm] = useState({ name: '', pin: '', shiftId: '', enrollmentDate: '', dryWeight: '', notes: '' })
+  const [form, setForm] = useState({
+    patientCode: '', pin: '', shiftId: '', center: 'Feldbach',
+    dialysisSchedule: 'MWF', customDialysisDays: '',
+    enrollmentDate: '', dryWeight: '', notes: '',
+  })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filterActive, setFilterActive] = useState(true)
+  const [centerFilter, setCenterFilter] = useState<string>('all')
 
   const loadPatients = useCallback(async () => {
     const res = await fetch('/api/patients')
@@ -191,7 +208,7 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
   useEffect(() => { loadPatients() }, [loadPatients])
 
   function openAdd() {
-    setForm({ name: '', pin: '', shiftId: shifts[0]?.id.toString() ?? '', enrollmentDate: new Date().toISOString().slice(0, 10), dryWeight: '', notes: '' })
+    setForm({ patientCode: '', pin: '', shiftId: shifts[0]?.id.toString() ?? '', center: 'Feldbach', dialysisSchedule: 'MWF', customDialysisDays: '', enrollmentDate: new Date().toISOString().slice(0, 10), dryWeight: '', notes: '' })
     setEditPatient(null)
     setShowAdd(true)
     setError(null)
@@ -199,9 +216,12 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
 
   function openEdit(patient: Patient) {
     setForm({
-      name: patient.name,
+      patientCode: patient.patientCode,
       pin: '',
       shiftId: patient.shiftId.toString(),
+      center: patient.center,
+      dialysisSchedule: patient.dialysisSchedule,
+      customDialysisDays: patient.customDialysisDays ?? '',
       enrollmentDate: patient.enrollmentDate.slice(0, 10),
       dryWeight: patient.dryWeight?.toString() ?? '',
       notes: patient.notes ?? '',
@@ -211,14 +231,26 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
     setError(null)
   }
 
+  function toggleCustomDay(day: number) {
+    const current = form.customDialysisDays ? form.customDialysisDays.split(',').map(Number).filter(Boolean) : []
+    const updated = current.includes(day) ? current.filter((d) => d !== day) : [...current, day].sort()
+    setForm((f) => ({ ...f, customDialysisDays: updated.join(',') }))
+  }
+
   async function savePatient() {
     setSaving(true)
     setError(null)
     try {
+      const schedulePayload = {
+        dialysisSchedule: form.dialysisSchedule,
+        customDialysisDays: form.dialysisSchedule === 'custom' ? (form.customDialysisDays || null) : null,
+      }
       if (editPatient) {
         const body: Record<string, unknown> = {
-          name: form.name,
+          patientCode: form.patientCode.toUpperCase(),
           shiftId: parseInt(form.shiftId),
+          center: form.center,
+          ...schedulePayload,
           enrollmentDate: form.enrollmentDate,
           dryWeight: form.dryWeight || null,
           notes: form.notes || null,
@@ -234,7 +266,7 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
         const res = await fetch('/api/patients', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: form.name, pin: form.pin, shiftId: parseInt(form.shiftId), enrollmentDate: form.enrollmentDate, notes: form.notes || null }),
+          body: JSON.stringify({ patientCode: form.patientCode.toUpperCase(), pin: form.pin, shiftId: parseInt(form.shiftId), center: form.center, ...schedulePayload, enrollmentDate: form.enrollmentDate, notes: form.notes || null }),
         })
         if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
       }
@@ -253,18 +285,38 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
     loadPatients()
   }
 
-  const visible = patients.filter((p) => filterActive ? p.isActive : !p.isActive)
+  const visible = patients.filter((p) => {
+    if (filterActive ? !p.isActive : p.isActive) return false
+    if (centerFilter !== 'all' && p.center !== centerFilter) return false
+    return true
+  })
+
+  const scheduleLabel = (p: Patient) => {
+    if (p.dialysisSchedule === 'MWF') return 'MMF'
+    if (p.dialysisSchedule === 'TThS') return 'DiDoSa'
+    if (p.dialysisSchedule === 'custom' && p.customDialysisDays) {
+      return p.customDialysisDays.split(',').map(Number).map((d) => DAY_LABELS[d]).join('-')
+    }
+    return p.dialysisSchedule
+  }
+
+  const customDaysArr = form.customDialysisDays ? form.customDialysisDays.split(',').map(Number).filter(Boolean) : []
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex gap-2">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button onClick={() => setFilterActive(true)} className={clsx('px-3 py-1.5 rounded-lg text-sm font-semibold transition', filterActive ? 'bg-blue-700 text-white' : 'bg-white border border-slate-200 text-slate-600')}>
             Active ({patients.filter(p => p.isActive).length})
           </button>
           <button onClick={() => setFilterActive(false)} className={clsx('px-3 py-1.5 rounded-lg text-sm font-semibold transition', !filterActive ? 'bg-blue-700 text-white' : 'bg-white border border-slate-200 text-slate-600')}>
             Dropped Out ({patients.filter(p => !p.isActive).length})
           </button>
+          <select value={centerFilter} onChange={(e) => setCenterFilter(e.target.value)}
+            className="px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-slate-600 bg-white">
+            <option value="all">All Centers</option>
+            {CENTERS.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
         </div>
         <button onClick={openAdd} className="bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800 transition">
           + Add Patient
@@ -277,7 +329,9 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
         <table className="w-full text-sm">
           <thead className="bg-slate-50">
             <tr className="text-left text-slate-500 border-b">
-              <th className="py-3 px-4 font-semibold">Name</th>
+              <th className="py-3 px-4 font-semibold">Code</th>
+              <th className="py-3 px-4 font-semibold">Center</th>
+              <th className="py-3 px-4 font-semibold">Schedule</th>
               <th className="py-3 px-4 font-semibold">Shift</th>
               <th className="py-3 px-4 font-semibold">Enrolled</th>
               <th className="py-3 px-4 font-semibold">Sessions</th>
@@ -287,7 +341,9 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
           <tbody>
             {visible.map((p) => (
               <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50">
-                <td className="py-2.5 px-4 font-medium">{p.name}</td>
+                <td className="py-2.5 px-4 font-mono font-semibold text-blue-700">{p.patientCode}</td>
+                <td className="py-2.5 px-4 text-slate-600">{p.center}</td>
+                <td className="py-2.5 px-4 text-slate-500 text-xs">{scheduleLabel(p)}</td>
                 <td className="py-2.5 px-4 text-slate-500">{p.shift.name}</td>
                 <td className="py-2.5 px-4 text-slate-500">{p.enrollmentDate.slice(0, 10)}</td>
                 <td className="py-2.5 px-4">{p._count.promResponses}</td>
@@ -300,19 +356,19 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
               </tr>
             ))}
             {visible.length === 0 && (
-              <tr><td colSpan={5} className="py-8 text-center text-slate-400">No patients found</td></tr>
+              <tr><td colSpan={7} className="py-8 text-center text-slate-400">No patients found</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
       {showAdd && (
-        <Modal title={editPatient ? `Edit: ${editPatient.name}` : 'Add New Patient'} onClose={() => setShowAdd(false)}>
+        <Modal title={editPatient ? `Edit: ${editPatient.patientCode}` : 'Add New Patient'} onClose={() => setShowAdd(false)}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">Full Name *</label>
-              <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" placeholder="Maria Muster" />
+              <label className="block text-sm font-semibold text-slate-600 mb-1">Patient Code * (HMY-XXXX)</label>
+              <input value={form.patientCode} onChange={(e) => setForm((f) => ({ ...f, patientCode: e.target.value.toUpperCase() }))}
+                className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 font-mono focus:outline-none focus:border-blue-500" placeholder="HMY-0001" maxLength={8} />
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-600 mb-1">
@@ -325,6 +381,42 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
                 placeholder="e.g. 123456"
               />
             </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-600 mb-1">Center *</label>
+              <select value={form.center} onChange={(e) => setForm((f) => ({ ...f, center: e.target.value }))}
+                className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+                {CENTERS.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-600 mb-1">Dialysis Schedule *</label>
+              <select value={form.dialysisSchedule} onChange={(e) => setForm((f) => ({ ...f, dialysisSchedule: e.target.value }))}
+                className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+                {SCHEDULE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            {form.dialysisSchedule === 'custom' && (
+              <div>
+                <label className="block text-sm font-semibold text-slate-600 mb-2">Dialyse-Tage auswählen</label>
+                <div className="flex gap-2 flex-wrap">
+                  {[1, 2, 3, 4, 5, 6, 0].map((day) => (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => toggleCustomDay(day)}
+                      className={clsx(
+                        'w-10 h-10 rounded-lg text-sm font-semibold border-2 transition',
+                        customDaysArr.includes(day)
+                          ? 'bg-blue-700 text-white border-blue-700'
+                          : 'bg-white text-slate-600 border-slate-300 hover:border-blue-400'
+                      )}
+                    >
+                      {DAY_LABELS[day]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-semibold text-slate-600 mb-1">Shift *</label>
               <select value={form.shiftId} onChange={(e) => setForm((f) => ({ ...f, shiftId: e.target.value }))}
@@ -373,7 +465,7 @@ function ProvidersTab({ shifts }: { shifts: Shift[] }) {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [editProvider, setEditProvider] = useState<Provider | null>(null)
-  const [form, setForm] = useState({ name: '', username: '', password: '', role: 'provider', shiftId: '' })
+  const [form, setForm] = useState({ name: '', username: '', password: '', role: 'provider', shiftId: '', center: 'Feldbach' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -386,14 +478,14 @@ function ProvidersTab({ shifts }: { shifts: Shift[] }) {
   useEffect(() => { loadProviders() }, [loadProviders])
 
   function openAdd() {
-    setForm({ name: '', username: '', password: '', role: 'provider', shiftId: shifts[0]?.id.toString() ?? '' })
+    setForm({ name: '', username: '', password: '', role: 'provider', shiftId: shifts[0]?.id.toString() ?? '', center: 'Feldbach' })
     setEditProvider(null)
     setShowAdd(true)
     setError(null)
   }
 
   function openEdit(p: Provider) {
-    setForm({ name: p.name, username: p.username, password: '', role: p.role, shiftId: p.shiftId?.toString() ?? '' })
+    setForm({ name: p.name, username: p.username, password: '', role: p.role, shiftId: p.shiftId?.toString() ?? '', center: p.center ?? 'Feldbach' })
     setEditProvider(p)
     setShowAdd(true)
     setError(null)
@@ -404,7 +496,7 @@ function ProvidersTab({ shifts }: { shifts: Shift[] }) {
     setError(null)
     try {
       if (editProvider) {
-        const body: Record<string, unknown> = { name: form.name, role: form.role, shiftId: form.shiftId ? parseInt(form.shiftId) : null }
+        const body: Record<string, unknown> = { name: form.name, role: form.role, shiftId: form.shiftId ? parseInt(form.shiftId) : null, center: form.role === 'provider' ? form.center : null }
         if (form.password) body.password = form.password
         const res = await fetch(`/api/providers/${editProvider.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
@@ -412,7 +504,7 @@ function ProvidersTab({ shifts }: { shifts: Shift[] }) {
         const res = await fetch('/api/providers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: form.name, username: form.username, password: form.password, role: form.role, shiftId: form.shiftId ? parseInt(form.shiftId) : null }),
+          body: JSON.stringify({ name: form.name, username: form.username, password: form.password, role: form.role, shiftId: form.shiftId ? parseInt(form.shiftId) : null, center: form.role === 'provider' ? form.center : null }),
         })
         if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
       }
@@ -442,6 +534,7 @@ function ProvidersTab({ shifts }: { shifts: Shift[] }) {
               <th className="py-3 px-4 font-semibold">Name</th>
               <th className="py-3 px-4 font-semibold">Username</th>
               <th className="py-3 px-4 font-semibold">Role</th>
+              <th className="py-3 px-4 font-semibold">Center</th>
               <th className="py-3 px-4 font-semibold">Shift</th>
               <th className="py-3 px-4 font-semibold">Status</th>
               <th className="py-3 px-4 font-semibold">Actions</th>
@@ -457,6 +550,7 @@ function ProvidersTab({ shifts }: { shifts: Shift[] }) {
                     {p.role}
                   </span>
                 </td>
+                <td className="py-2.5 px-4 text-slate-500">{p.center ?? '—'}</td>
                 <td className="py-2.5 px-4 text-slate-500">{p.shift?.name ?? '—'}</td>
                 <td className="py-2.5 px-4">
                   <span className={clsx('text-xs font-semibold', p.isActive ? 'text-green-600' : 'text-slate-400')}>
@@ -503,14 +597,23 @@ function ProvidersTab({ shifts }: { shifts: Shift[] }) {
               </select>
             </div>
             {form.role === 'provider' && (
-              <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1">Assigned Shift</label>
-                <select value={form.shiftId} onChange={(e) => setForm((f) => ({ ...f, shiftId: e.target.value }))}
-                  className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
-                  <option value="">— No shift —</option>
-                  {shifts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
+              <>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1">Center *</label>
+                  <select value={form.center} onChange={(e) => setForm((f) => ({ ...f, center: e.target.value }))}
+                    className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+                    {CENTERS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1">Assigned Shift</label>
+                  <select value={form.shiftId} onChange={(e) => setForm((f) => ({ ...f, shiftId: e.target.value }))}
+                    className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+                    <option value="">— No shift —</option>
+                    {shifts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              </>
             )}
             {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg p-3">{error}</p>}
             <div className="flex gap-3 pt-2">
@@ -658,15 +761,15 @@ function ImportTab() {
       <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
         <h3 className="font-bold text-slate-800 text-lg">Import Clinical / Dialysis Data</h3>
         <p className="text-slate-500 text-sm">
-          Upload a CSV file with one row per patient per session date. Patient names must match exactly.
+          Upload a CSV file with one row per patient per session date. Patient codes (HMY-XXXX) must match exactly.
         </p>
 
         {/* Expected format */}
         <div className="bg-slate-50 rounded-xl p-4 font-mono text-xs text-slate-600 overflow-x-auto">
           <p className="font-semibold text-slate-700 mb-1 font-sans text-xs">Expected CSV columns (header row required):</p>
-          <p>patient_name, date, pre_dialysis_weight, idwg, systolic_bp, diastolic_bp</p>
+          <p>patient_code, date, pre_dialysis_weight, idwg, systolic_bp, diastolic_bp</p>
           <p className="mt-2 text-slate-400 font-sans">
-            Column names are flexible — e.g. "name", "weight", "sbp" are also accepted.<br />
+            Column names are flexible — e.g. "code", "weight", "sbp" are also accepted.<br />
             Date format: YYYY-MM-DD &nbsp;·&nbsp; All clinical columns are optional.<br />
             Existing rows for the same patient + date are updated (upsert).
           </p>

@@ -33,12 +33,12 @@ export async function POST(req: NextRequest) {
   const headers = parseCsvLine(lines[0]).map((h) => h.toLowerCase().trim().replace(/\s+/g, '_'))
 
   // Required columns
-  const patientNameIdx = findCol(headers, ['patient_name', 'name', 'patient'])
+  const patientCodeIdx = findCol(headers, ['patient_code', 'code', 'patient_name', 'name', 'patient'])
   const dateIdx = findCol(headers, ['date', 'session_date', 'dialysis_date'])
 
-  if (patientNameIdx === -1 || dateIdx === -1) {
+  if (patientCodeIdx === -1 || dateIdx === -1) {
     return NextResponse.json({
-      error: 'CSV must have columns for patient name (patient_name/name) and date (date/session_date)',
+      error: 'CSV must have columns for patient code (patient_code/code) and date (date/session_date)',
     }, { status: 400 })
   }
 
@@ -48,10 +48,10 @@ export async function POST(req: NextRequest) {
   const systolicIdx    = findCol(headers, ['systolic_bp', 'systolic', 'sbp'])
   const diastolicIdx   = findCol(headers, ['diastolic_bp', 'diastolic', 'dbp'])
 
-  // ── Load patient name → id map ─────────────────────────────────────────────
-  const patients = await prisma.patient.findMany({ select: { id: true, name: true } })
+  // ── Load patient code → id map ─────────────────────────────────────────────
+  const patients = await prisma.patient.findMany({ select: { id: true, patientCode: true } })
   const nameMap = new Map<string, number>()
-  for (const p of patients) nameMap.set(p.name.toLowerCase().trim(), p.id)
+  for (const p of patients) nameMap.set(p.patientCode.toUpperCase().trim(), p.id)
 
   // ── Process rows ───────────────────────────────────────────────────────────
   let imported = 0
@@ -65,18 +65,18 @@ export async function POST(req: NextRequest) {
     const cols = parseCsvLine(line)
     const rowNum = i + 1
 
-    const rawName = cols[patientNameIdx]?.trim()
+    const rawCode = cols[patientCodeIdx]?.trim()
     const rawDate = cols[dateIdx]?.trim()
 
-    if (!rawName || !rawDate) {
-      errors.push(`Row ${rowNum}: missing patient name or date`)
+    if (!rawCode || !rawDate) {
+      errors.push(`Row ${rowNum}: missing patient code or date`)
       skipped++
       continue
     }
 
-    const patientId = nameMap.get(rawName.toLowerCase())
+    const patientId = nameMap.get(rawCode.toUpperCase())
     if (!patientId) {
-      errors.push(`Row ${rowNum}: patient "${rawName}" not found`)
+      errors.push(`Row ${rowNum}: patient "${rawCode}" not found`)
       skipped++
       continue
     }
