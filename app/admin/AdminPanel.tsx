@@ -1353,33 +1353,35 @@ export default function AdminPanel({ adminName }: { adminName: string }) {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <header className="bg-blue-900 text-white px-6 py-4 shadow flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-black">HARMONY · {lang === 'de' ? 'Admin-Panel' : 'Admin Panel'}</h1>
-          <p className="text-blue-200 text-sm">{adminName}</p>
-        </div>
-        <div className="flex gap-2 items-center flex-wrap justify-end">
-          <select
-            value={siteFilter}
-            onChange={(e) => setSiteFilter(e.target.value)}
-            className="bg-blue-800 text-blue-100 border border-blue-600 text-sm px-3 py-1.5 rounded-lg focus:outline-none"
-          >
-            <option value="all">{lang === 'de' ? 'Alle Zentren' : 'All Centers'}</option>
-            {CENTERS.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <a href="/provider" className="text-blue-200 hover:text-white text-sm border border-blue-600 px-3 py-1.5 rounded-lg transition">
-            {lang === 'de' ? 'Pflegeansicht' : 'Provider View'}
-          </a>
-          <button
-            onClick={() => setLang((l) => l === 'de' ? 'en' : 'de')}
-            className="text-blue-200 hover:text-white text-sm font-bold px-3 py-1.5 rounded-lg border border-blue-600 transition"
-          >
-            {lang === 'de' ? 'EN' : 'DE'}
-          </button>
-          <button onClick={() => signOut({ callbackUrl: '/login' })}
-            className="text-blue-200 hover:text-white text-sm border border-blue-600 px-3 py-1.5 rounded-lg transition">
-            {lang === 'de' ? 'Abmelden' : 'Sign Out'}
-          </button>
+      <header className="bg-blue-900 text-white px-4 py-3 shadow">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <h1 className="text-lg font-black leading-tight">HARMONY · {lang === 'de' ? 'Admin' : 'Admin'}</h1>
+            <p className="text-blue-200 text-xs truncate">{adminName}</p>
+          </div>
+          <div className="flex gap-1.5 items-center flex-wrap">
+            <select
+              value={siteFilter}
+              onChange={(e) => setSiteFilter(e.target.value)}
+              className="bg-blue-800 text-blue-100 border border-blue-600 text-xs px-2 py-1.5 rounded-lg focus:outline-none"
+            >
+              <option value="all">{lang === 'de' ? 'Alle' : 'All'}</option>
+              {CENTERS.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <a href="/provider" className="text-blue-200 hover:text-white text-xs border border-blue-600 px-2 py-1.5 rounded-lg transition whitespace-nowrap">
+              {lang === 'de' ? 'Pflege' : 'Providers'}
+            </a>
+            <button
+              onClick={() => setLang((l) => l === 'de' ? 'en' : 'de')}
+              className="text-blue-200 hover:text-white text-xs font-bold px-2 py-1.5 rounded-lg border border-blue-600 transition"
+            >
+              {lang === 'de' ? 'EN' : 'DE'}
+            </button>
+            <button onClick={() => signOut({ callbackUrl: '/login' })}
+              className="text-blue-200 hover:text-white text-xs border border-blue-600 px-2 py-1.5 rounded-lg transition">
+              {lang === 'de' ? 'Abmelden' : 'Sign Out'}
+            </button>
+          </div>
         </div>
       </header>
 

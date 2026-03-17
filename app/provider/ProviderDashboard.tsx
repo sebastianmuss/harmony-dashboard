@@ -643,11 +643,29 @@ function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, o
 
   return (
     <div className={clsx('bg-white rounded-xl border-2 shadow-sm overflow-hidden transition-all', patient.submittedToday ? 'border-green-300' : 'border-slate-200')}>
-      <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => setExpanded((e) => !e)}>
-        <div className={clsx('w-3 h-3 rounded-full flex-shrink-0', patient.submittedToday ? 'bg-green-500' : 'bg-slate-300')} />
+      <div className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => setExpanded((e) => !e)}>
+        <div className={clsx('w-3 h-3 rounded-full flex-shrink-0 mt-1.5', patient.submittedToday ? 'bg-green-500' : 'bg-slate-300')} />
         <div className="flex-1 min-w-0">
-          <p className="font-mono font-bold text-blue-700 truncate">{patient.patientCode}</p>
-          <div className="flex items-center gap-2 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <p className="font-mono font-bold text-blue-700 truncate flex-1">{patient.patientCode}</p>
+            {patient.submittedToday && patient.todayProm && (
+              <div className="flex gap-1 flex-shrink-0">
+                <ScoreBadge score={patient.todayProm.fluidStatusScore} />
+                <ScoreBadge score={patient.todayProm.thirstScore} />
+                <ScoreBadge score={patient.todayProm.fluidOverloadScore} />
+              </div>
+            )}
+            {!patient.submittedToday && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowPromEntry(true) }}
+                className="text-xs bg-blue-600 text-white px-2.5 py-1 rounded-lg hover:bg-blue-700 font-semibold transition flex-shrink-0"
+              >
+                {enterPromLabel}
+              </button>
+            )}
+            <span className="text-slate-400 text-xs flex-shrink-0">{expanded ? '▲' : '▼'}</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5 flex-wrap">
             <span>{patient.center}</span>
             <span>·</span>
             <span>{patient.promHistory.length} sessions</span>
@@ -655,22 +673,6 @@ function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, o
             {!patient.onHDToday && <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-semibold">{lang === 'de' ? 'Kein HD-Tag' : 'No HD today'}</span>}
           </div>
         </div>
-        {patient.submittedToday && patient.todayProm && (
-          <div className="flex gap-1">
-            <ScoreBadge score={patient.todayProm.fluidStatusScore} />
-            <ScoreBadge score={patient.todayProm.thirstScore} />
-            <ScoreBadge score={patient.todayProm.fluidOverloadScore} />
-          </div>
-        )}
-        {!patient.submittedToday && (
-          <button
-            onClick={(e) => { e.stopPropagation(); setShowPromEntry(true) }}
-            className="text-xs bg-blue-600 text-white px-2.5 py-1 rounded-lg hover:bg-blue-700 font-semibold transition"
-          >
-            {enterPromLabel}
-          </button>
-        )}
-        <span className="text-slate-400 text-xs ml-1">{expanded ? '▲' : '▼'}</span>
       </div>
 
       {showPromEntry && (
@@ -808,26 +810,28 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <header className="bg-blue-800 text-white px-6 py-4 shadow flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-black">HARMONY · {lang === 'de' ? 'Pflegedashboard' : 'Provider Dashboard'}</h1>
-          <p className="text-blue-200 text-sm">{providerName} · {shiftName}</p>
-        </div>
-        <div className="flex gap-2 items-center">
-          {role === 'admin' && (
-            <a href="/admin" className="text-blue-200 hover:text-white text-sm border border-blue-500 px-3 py-1.5 rounded-lg transition">
-              Admin Panel
-            </a>
-          )}
-          <button
-            onClick={() => setLang((l) => l === 'en' ? 'de' : 'en')}
-            className="text-blue-200 hover:text-white text-sm font-bold px-3 py-1.5 rounded-lg border border-blue-500 transition"
-          >
-            {lang === 'en' ? 'DE' : 'EN'}
-          </button>
-          <button onClick={() => signOut({ callbackUrl: '/login' })} className="text-blue-200 hover:text-white text-sm border border-blue-500 px-3 py-1.5 rounded-lg transition">
-            {lang === 'de' ? 'Abmelden' : 'Sign Out'}
-          </button>
+      <header className="bg-blue-800 text-white px-4 py-3 shadow">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-base font-black leading-tight truncate">HARMONY · {lang === 'de' ? 'Pflege' : 'Provider'}</h1>
+            <p className="text-blue-200 text-xs truncate">{providerName} · {shiftName}</p>
+          </div>
+          <div className="flex gap-1.5 items-center flex-shrink-0">
+            {role === 'admin' && (
+              <a href="/admin" className="text-blue-200 hover:text-white text-xs border border-blue-500 px-2 py-1.5 rounded-lg transition whitespace-nowrap">
+                Admin
+              </a>
+            )}
+            <button
+              onClick={() => setLang((l) => l === 'en' ? 'de' : 'en')}
+              className="text-blue-200 hover:text-white text-xs font-bold px-2 py-1.5 rounded-lg border border-blue-500 transition"
+            >
+              {lang === 'en' ? 'DE' : 'EN'}
+            </button>
+            <button onClick={() => signOut({ callbackUrl: '/login' })} className="text-blue-200 hover:text-white text-xs border border-blue-500 px-2 py-1.5 rounded-lg transition">
+              {lang === 'de' ? 'Abmelden' : 'Sign Out'}
+            </button>
+          </div>
         </div>
       </header>
 
