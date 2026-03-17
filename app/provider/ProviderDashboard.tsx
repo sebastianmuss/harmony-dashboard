@@ -65,6 +65,146 @@ interface ClinicalFormState {
   diastolicBp: string
 }
 
+// ── Trend interfaces + helpers ────────────────────────────────────────────────
+interface PromTrendWeek { week: number; fluidStatus: number | null; thirst: number | null; overload: number | null; n: number }
+interface ClinicalTrendWeek { week: number; preWeight: number | null; idwg: number | null; systolic: number | null; n: number }
+interface TrendsData { promTrends: PromTrendWeek[]; clinicalTrends: ClinicalTrendWeek[]; center: string | null }
+
+function smoothTrend(weeks: { week: number; value: number | null }[]): Map<number, number> {
+  const withData = weeks.filter((w) => w.value !== null) as { week: number; value: number }[]
+  if (withData.length < 3) return new Map(withData.map((w) => [w.week, w.value]))
+  const smoothed = loess(withData.map((w) => w.value), 0.5)
+  const m = new Map<number, number>()
+  withData.forEach((w, i) => m.set(w.week, parseFloat(smoothed[i].toFixed(2))))
+  return m
+}
+
+// ── Provider Verlauf View ─────────────────────────────────────────────────────
+function ProviderVerlaufView({ lang }: { lang: Lang }) {
+  const [data, setData] = useState<TrendsData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/trends')
+      .then((r) => r.json())
+      .then(setData)
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="bg-white rounded-xl p-8 text-center text-slate-400">{lang === 'de' ? 'Lade Verlaufsdaten…' : 'Loading trend data…'}</div>
+  if (!data) return <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700">{lang === 'de' ? 'Laden fehlgeschlagen' : 'Failed to load'}</div>
+
+  const fluidSmooth    = smoothTrend(data.promTrends.map((w) => ({ week: w.week, value: w.fluidStatus })))
+  const thirstSmooth   = smoothTrend(data.promTrends.map((w) => ({ week: w.week, value: w.thirst })))
+  const overSmooth     = smoothTrend(data.promTrends.map((w) => ({ week: w.week, value: w.overload })))
+  const weightSmooth   = smoothTrend(data.clinicalTrends.map((w) => ({ week: w.week, value: w.preWeight })))
+  const idwgSmooth     = smoothTrend(data.clinicalTrends.map((w) => ({ week: w.week, value: w.idwg })))
+  const systolicSmooth = smoothTrend(data.clinicalTrends.map((w) => ({ week: w.week, value: w.systolic })))
+
+  const promChartData = data.promTrends.map((w) => ({
+    name: `W${w.week}`,
+    fluid: w.fluidStatus, thirst: w.thirst, overload: w.overload,
+    fluidL:    fluidSmooth.get(w.week)  ?? null,
+    thirstL:   thirstSmooth.get(w.week) ?? null,
+    overloadL: overSmooth.get(w.week)   ?? null,
+    n: w.n,
+  }))
+  const clinChartData = data.clinicalTrends.map((w) => ({
+    name: `W${w.week}`,
+    weight: w.preWeight, idwg: w.idwg, systolic: w.systolic,
+    weightL:   weightSmooth.get(w.week)   ?? null,
+    idwgL:     idwgSmooth.get(w.week)     ?? null,
+    systolicL: systolicSmooth.get(w.week) ?? null,
+    n: w.n,
+  }))
+
+  const pL = lang === 'de'
+    ? { fluid: 'Wohlbefinden', thirst: 'Durst', overload: 'Überwässerung' }
+    : { fluid: 'Wellbeing', thirst: 'Thirst', overload: 'Overload' }
+  const cL = lang === 'de'
+    ? { weight: 'Gewicht vor Dialyse (kg)', idwg: 'IDWG (kg)', systolic: 'Systolisch (mmHg)' }
+    : { weight: 'Pre-dialysis weight (kg)', idwg: 'IDWG (kg)', systolic: 'Systolic BP (mmHg)' }
+
+  const legendFmt = (labels: Record<string, string>) => (v: string) => v.endsWith('L') ? '' : (labels[v] ?? v)
+  const ttFmt = (labels: Record<string, string>, unit = '') => (val: number | string, name: string) => {
+    if (name.endsWith('L')) return [null, null]
+    return [typeof val === 'number' ? `${val.toFixed(2)}${unit}` : val, labels[name] ?? name]
+  }
+  const lblFmt = (label: string, payload: any[]) => `${label}${payload?.[0]?.payload?.n ? ` (n=${payload[0].payload.n})` : ''}`
+
+  const hasPromData = data.promTrends.some((w) => w.n > 0)
+  const hasClinData = data.clinicalTrends.some((w) => w.n > 0)
+
+  return (
+    <div className="space-y-4">
+      {data.center && (
+        <p className="text-xs text-slate-500">{lang === 'de' ? 'Zentrum' : 'Center'}: <span className="font-semibold">{data.center}</span> · {lang === 'de' ? 'Punkte = Wochenmittel · Kurve = LOESS' : 'Dots = weekly mean · Curve = LOESS'}</p>
+      )}
+
+      <div className="bg-white rounded-xl p-4 shadow-sm">
+        <h3 className="font-semibold text-slate-700 mb-3 text-sm">{lang === 'de' ? 'PROM-Verlauf' : 'PROM Trends'}</h3>
+        {!hasPromData ? (
+          <p className="text-slate-400 text-sm py-6 text-center">{lang === 'de' ? 'Keine Daten' : 'No data'}</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={230}>
+            <LineChart data={promChartData} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis domain={[1, 5]} ticks={[1,2,3,4,5]} tick={{ fontSize: 11 }} />
+              <Tooltip formatter={ttFmt(pL)} labelFormatter={lblFmt} />
+              <Legend formatter={legendFmt(pL)} iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="fluid"     stroke="#3b82f6" strokeWidth={0} dot={{ r: 3, fill: '#3b82f6' }} legendType="circle" name="fluid"    connectNulls />
+              <Line type="monotone" dataKey="thirst"    stroke="#f59e0b" strokeWidth={0} dot={{ r: 3, fill: '#f59e0b' }} legendType="circle" name="thirst"   connectNulls />
+              <Line type="monotone" dataKey="overload"  stroke="#ef4444" strokeWidth={0} dot={{ r: 3, fill: '#ef4444' }} legendType="circle" name="overload" connectNulls />
+              <Line type="monotone" dataKey="fluidL"    stroke="#3b82f6" strokeWidth={2.5} dot={false} legendType="none" name="fluidL"    connectNulls />
+              <Line type="monotone" dataKey="thirstL"   stroke="#f59e0b" strokeWidth={2.5} dot={false} legendType="none" name="thirstL"   connectNulls />
+              <Line type="monotone" dataKey="overloadL" stroke="#ef4444" strokeWidth={2.5} dot={false} legendType="none" name="overloadL" connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl p-4 shadow-sm">
+        <h3 className="font-semibold text-slate-700 mb-3 text-sm">{lang === 'de' ? 'Gewicht & IDWG' : 'Weight & IDWG'}</h3>
+        {!hasClinData ? (
+          <p className="text-slate-400 text-sm py-6 text-center">{lang === 'de' ? 'Keine Daten' : 'No data'}</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={clinChartData} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip formatter={ttFmt({ weight: cL.weight, idwg: cL.idwg })} labelFormatter={lblFmt} />
+              <Legend formatter={legendFmt({ weight: cL.weight, idwg: cL.idwg })} iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="weight"  stroke="#3b82f6" strokeWidth={0} dot={{ r: 3, fill: '#3b82f6' }} legendType="circle" name="weight" connectNulls />
+              <Line type="monotone" dataKey="idwg"    stroke="#10b981" strokeWidth={0} dot={{ r: 3, fill: '#10b981' }} legendType="circle" name="idwg"   connectNulls />
+              <Line type="monotone" dataKey="weightL" stroke="#3b82f6" strokeWidth={2.5} dot={false} legendType="none" name="weightL" connectNulls />
+              <Line type="monotone" dataKey="idwgL"   stroke="#10b981" strokeWidth={2.5} dot={false} legendType="none" name="idwgL"   connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl p-4 shadow-sm">
+        <h3 className="font-semibold text-slate-700 mb-3 text-sm">{lang === 'de' ? 'Blutdruck (systolisch)' : 'Blood Pressure (systolic)'}</h3>
+        {!hasClinData ? null : (
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={clinChartData} margin={{ top: 4, right: 8, left: -4, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} unit=" mmHg" />
+              <Tooltip formatter={ttFmt({ systolic: cL.systolic }, ' mmHg')} labelFormatter={lblFmt} />
+              <Legend formatter={legendFmt({ systolic: cL.systolic })} iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="systolic"  stroke="#8b5cf6" strokeWidth={0} dot={{ r: 3, fill: '#8b5cf6' }} legendType="circle" name="systolic"  connectNulls />
+              <Line type="monotone" dataKey="systolicL" stroke="#8b5cf6" strokeWidth={2.5} dot={false} legendType="none" name="systolicL" connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const PROM_QUESTIONS = {
   en: [
     { key: 'fluidStatusScore' as const, label: 'How do you feel today?', sub: 'General wellbeing / fluid balance (1 = excellent)' },
@@ -632,7 +772,8 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'submitted' | 'pending'>('all')
-  const [lang, setLang] = useState<Lang>('en')
+  const [lang, setLang] = useState<Lang>('de')
+  const [view, setView] = useState<'patients' | 'verlauf'>('patients')
 
   const fetchData = useCallback(async () => {
     try {
@@ -720,8 +861,22 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
               </button>
             </div>
 
-            <div className="flex gap-2">
-              {(['all', 'pending', 'submitted'] as const).map((f) => (
+            <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-1 bg-white border border-slate-200 rounded-lg p-1">
+                <button
+                  onClick={() => setView('patients')}
+                  className={clsx('px-3 py-1.5 rounded-md text-sm font-semibold transition', view === 'patients' ? 'bg-blue-700 text-white' : 'text-slate-500 hover:text-slate-800')}
+                >
+                  {lang === 'de' ? 'Patienten' : 'Patients'}
+                </button>
+                <button
+                  onClick={() => setView('verlauf')}
+                  className={clsx('px-3 py-1.5 rounded-md text-sm font-semibold transition', view === 'verlauf' ? 'bg-blue-700 text-white' : 'text-slate-500 hover:text-slate-800')}
+                >
+                  {lang === 'de' ? 'Verlauf' : 'Trends'}
+                </button>
+              </div>
+              {view === 'patients' && (['all', 'pending', 'submitted'] as const).map((f) => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
@@ -736,7 +891,9 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
               ))}
             </div>
 
-            <div className="space-y-4">
+            {view === 'verlauf' && <ProviderVerlaufView lang={lang} />}
+
+            <div className={clsx('space-y-4', view !== 'patients' && 'hidden')}>
               {filteredPatients.length === 0 && (
                 <div className="bg-white rounded-xl p-8 text-center text-slate-400">
                   {filter === 'pending'

@@ -19,6 +19,17 @@ export async function GET() {
     return NextResponse.json({ error: 'No shift or center assigned' }, { status: 400 })
   }
 
+  // Fire-and-forget: log this data view
+  prisma.activityLog.create({
+    data: {
+      eventType: 'data_view',
+      actorType: session.user.role,
+      actorId: session.user.providerId ?? null,
+      center: session.user.center ?? null,
+      shiftId: session.user.shiftId ?? null,
+    },
+  }).catch(() => {})
+
   const config = await prisma.studyConfig.findFirst()
   const studyWeek = config ? getCurrentStudyWeek(config.studyStartDate) : null
   const timepoint = studyWeek ? getTimepointForWeek(studyWeek) : null
@@ -76,7 +87,7 @@ export async function GET() {
       (c) => new Date(c.sessionDate).toDateString() === today.toDateString()
     )
 
-    const isLongGap = isLongGapSession(today, patient.dialysisSchedule !== 'custom' ? patient.dialysisSchedule : patient.shift.schedule)
+    const isLongGap = isLongGapSession(today, patient.dialysisSchedule, patient.customDialysisDays)
     const onHDToday = isDialysisDay(today, patient.dialysisSchedule, patient.customDialysisDays)
 
     return {

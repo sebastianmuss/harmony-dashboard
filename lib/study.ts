@@ -96,11 +96,25 @@ export function getTimepointLabelEn(timepoint: TimepointReference, onDialysisDay
  * Determine whether a dialysis session is a "long gap" session.
  * MWF: Monday is the long-gap session (after weekend).
  * TThS: Tuesday is the long-gap session (after Sunday + Monday).
+ * custom: the session day that follows the longest gap in the weekly cycle.
  */
-export function isLongGapSession(sessionDate: Date, schedule: string): boolean {
+export function isLongGapSession(sessionDate: Date, schedule: string, customDays?: string | null): boolean {
   const day = sessionDate.getDay() // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
   if (schedule === 'MWF') return day === 1 // Monday
   if (schedule === 'TThS') return day === 2 // Tuesday
+  if (schedule === 'custom' && customDays) {
+    const days = customDays.split(',').map(Number).filter((n) => n >= 0 && n <= 6).sort((a, b) => a - b)
+    if (!days.length || !days.includes(day)) return false
+    // Find the session day preceded by the longest gap (circular week)
+    let maxGap = 0
+    let longGapDay = days[0]
+    for (let i = 0; i < days.length; i++) {
+      const prev = days[(i - 1 + days.length) % days.length]
+      const gap = (days[i] - prev + 7) % 7 // includes the prev day itself, so subtract 1 for inter-session days
+      if (gap > maxGap) { maxGap = gap; longGapDay = days[i] }
+    }
+    return day === longGapDay
+  }
   return false
 }
 

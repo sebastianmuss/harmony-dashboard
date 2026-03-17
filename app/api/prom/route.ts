@@ -101,6 +101,17 @@ export async function POST(req: NextRequest) {
     },
   })
 
+  // Fire-and-forget activity log
+  prisma.activityLog.create({
+    data: {
+      eventType: 'prom_submit',
+      actorType: session.user.role,
+      actorId: session.user.patientId ?? session.user.providerId ?? null,
+      center: session.user.center ?? null,
+      shiftId: session.user.shiftId ?? null,
+    },
+  }).catch(() => {})
+
   return NextResponse.json(response, { status: 201 })
 }
 

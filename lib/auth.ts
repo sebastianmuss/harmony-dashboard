@@ -94,6 +94,22 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
+  events: {
+    async signIn({ user }) {
+      const u = user as any
+      try {
+        await prisma.activityLog.create({
+          data: {
+            eventType: 'login',
+            actorType: u.role ?? 'patient',
+            actorId: u.patientId ?? u.providerId ?? null,
+            center: u.center ?? null,
+            shiftId: u.shiftId ?? null,
+          },
+        })
+      } catch { /* non-fatal */ }
+    },
+  },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {

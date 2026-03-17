@@ -106,6 +106,23 @@ model ClinicalData {
   @@map("clinical_data")
 }
 
+// ─── Activity Log ─────────────────────────────────────────────────────────────
+// Tracks logins, PROM submissions, and data views per actor
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  eventType String   // 'login' | 'prom_submit' | 'data_view'
+  actorType String   // 'patient' | 'provider' | 'admin'
+  actorId   Int?     // patientId or providerId
+  center    String?
+  shiftId   Int?
+  createdAt DateTime @default(now())
+
+  @@index([eventType])
+  @@index([actorId, actorType])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
 // ─── Study Configuration ──────────────────────────────────────────────────────
 // Single row — insert once, update study start date to kick off week calculation
 model StudyConfig {

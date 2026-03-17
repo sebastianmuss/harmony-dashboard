@@ -3,12 +3,15 @@ import { useState, useEffect, useCallback } from 'react'
 import { signOut } from 'next-auth/react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell
+  ResponsiveContainer, Cell, LineChart, Line, Legend,
 } from 'recharts'
 import clsx from 'clsx'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
+import { loess } from '@/lib/loess'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+type Lang = 'en' | 'de'
+
 interface Shift {
   id: number
   name: string
@@ -44,12 +47,22 @@ interface Provider {
 }
 
 const CENTERS = ['Feldbach', 'Vienna']
-const SCHEDULE_OPTIONS = [
-  { value: 'MWF',    label: 'MMF (Mo-Mi-Fr)' },
-  { value: 'TThS',   label: 'DiDoSa (Di-Do-Sa)' },
-  { value: 'custom', label: 'Individuell' },
-]
-const DAY_LABELS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
+const SCHEDULE_OPTIONS = {
+  en: [
+    { value: 'MWF',    label: 'MWF (Mon-Wed-Fri)' },
+    { value: 'TThS',   label: 'TThS (Tue-Thu-Sat)' },
+    { value: 'custom', label: 'Custom' },
+  ],
+  de: [
+    { value: 'MWF',    label: 'MWF (Mo-Mi-Fr)' },
+    { value: 'TThS',   label: 'TThS (Di-Do-Sa)' },
+    { value: 'custom', label: 'Individuell' },
+  ],
+}
+const DAY_LABELS = {
+  en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  de: ['So',  'Mo',  'Di',  'Mi',  'Do',  'Fr',  'Sa'],
+}
 
 interface DashboardData {
   recruitment: { total: number; active: number; droppedOut: number }
@@ -57,10 +70,10 @@ interface DashboardData {
   todaySubmissions: number
   totalResponses: number
   weeklyStats: { week: number; submitted: number; expected: number; rate: number }[]
-  shiftStats: { shiftId: number; shiftName: string; schedule: string; patients: number; totalResponses: number }[]
+  shiftStats: { shiftId: number; shiftName: string; schedule: string; patients: number; totalResponses: number; uniqueSubmitters: number; completionPct: number }[]
 }
 
-type Tab = 'dashboard' | 'patients' | 'providers' | 'config' | 'import'
+type Tab = 'dashboard' | 'patients' | 'providers' | 'config' | 'import' | 'usage' | 'verlauf'
 
 // ── Small components ──────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, color = 'blue' }: { label: string; value: string | number; sub?: string; color?: string }) {
@@ -94,16 +107,18 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
 }
 
 // ── Dashboard Tab ─────────────────────────────────────────────────────────────
-function DashboardTab() {
+function DashboardTab({ lang, siteFilter }: { lang: Lang; siteFilter: string }) {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/admin/dashboard').then((r) => r.json()).then(setData).finally(() => setLoading(false))
-  }, [])
+    setLoading(true)
+    const q = siteFilter !== 'all' ? `?center=${encodeURIComponent(siteFilter)}` : ''
+    fetch(`/api/admin/dashboard${q}`).then((r) => r.json()).then(setData).finally(() => setLoading(false))
+  }, [siteFilter])
 
-  if (loading) return <div className="text-center py-12 text-slate-400">Loading dashboard…</div>
-  if (!data) return <div className="text-center py-12 text-red-400">Failed to load</div>
+  if (loading) return <div className="text-center py-12 text-slate-400">{lang === 'de' ? 'Lade Dashboard…' : 'Loading dashboard…'}</div>
+  if (!data) return <div className="text-center py-12 text-red-400">{lang === 'de' ? 'Laden fehlgeschlagen' : 'Failed to load'}</div>
 
   const completionData = data.weeklyStats.map((w) => ({
     name: `W${w.week}`,
@@ -113,54 +128,53 @@ function DashboardTab() {
 
   return (
     <div className="space-y-6">
-      {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="Total Patients" value={data.recruitment.total} color="blue" />
-        <StatCard label="Active" value={data.recruitment.active} color="green" />
-        <StatCard label="Dropped Out" value={data.recruitment.droppedOut} color="red" />
-        <StatCard label="Today's Submissions" value={data.todaySubmissions} color="amber" />
+        <StatCard label={lang === 'de' ? 'Patienten gesamt' : 'Total Patients'} value={data.recruitment.total} color="blue" />
+        <StatCard label={lang === 'de' ? 'Aktiv' : 'Active'} value={data.recruitment.active} color="green" />
+        <StatCard label={lang === 'de' ? 'Ausgeschieden' : 'Dropped Out'} value={data.recruitment.droppedOut} color="red" />
+        <StatCard label={lang === 'de' ? 'Eingaben heute' : "Today's Submissions"} value={data.todaySubmissions} color="amber" />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <StatCard label="Current Study Week" value={data.currentStudyWeek ?? 'Not active'} color="blue" />
-        <StatCard label="Total PROM Responses" value={data.totalResponses} color="green" />
+        <StatCard label={lang === 'de' ? 'Aktuelle Studienwoche' : 'Current Study Week'} value={data.currentStudyWeek ?? (lang === 'de' ? 'Nicht aktiv' : 'Not active')} color="blue" />
+        <StatCard label={lang === 'de' ? 'PROM-Antworten gesamt' : 'Total PROM Responses'} value={data.totalResponses} color="green" />
       </div>
 
-      {/* Completion rate chart by week */}
       <div className="bg-white rounded-xl p-4 shadow-sm">
-        <h3 className="font-semibold text-slate-700 mb-4">Completion Rate by Study Week (%)</h3>
+        <h3 className="font-semibold text-slate-700 mb-4">
+          {lang === 'de' ? 'Abschlussrate je Studienwoche (%)' : 'Completion Rate by Study Week (%)'}
+        </h3>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={completionData} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis dataKey="name" tick={{ fontSize: 11 }} />
             <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
             <Tooltip
-              formatter={(value, name) => [`${value}${name === 'rate' ? '%' : ''}`, name === 'rate' ? 'Rate' : 'Count']}
+              formatter={(value, name) => [`${value}${name === 'rate' ? '%' : ''}`, name === 'rate' ? (lang === 'de' ? 'Rate' : 'Rate') : (lang === 'de' ? 'Anzahl' : 'Count')]}
             />
             <Bar dataKey="rate" radius={[4, 4, 0, 0]}>
               {completionData.map((entry, i) => (
-                <Cell
-                  key={i}
-                  fill={entry.rate >= 80 ? '#16a34a' : entry.rate >= 50 ? '#f59e0b' : '#ef4444'}
-                />
+                <Cell key={i} fill={entry.rate >= 80 ? '#16a34a' : entry.rate >= 50 ? '#f59e0b' : '#ef4444'} />
               ))}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Shift breakdown */}
       <div className="bg-white rounded-xl p-4 shadow-sm">
-        <h3 className="font-semibold text-slate-700 mb-3">Response Rates by Shift</h3>
+        <h3 className="font-semibold text-slate-700 mb-3">
+          {lang === 'de' ? 'Antwortrate je Schicht' : 'Response Rates by Shift'}
+        </h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-slate-500 border-b">
-                <th className="py-2 pr-4 font-semibold">Shift</th>
-                <th className="py-2 pr-4 font-semibold">Schedule</th>
-                <th className="py-2 pr-4 font-semibold">Patients</th>
-                <th className="py-2 pr-4 font-semibold">Total Responses</th>
-                <th className="py-2 font-semibold">Avg/Patient</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Schicht' : 'Shift'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Turnus' : 'Schedule'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Patienten' : 'Patients'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Antworten gesamt' : 'Total Responses'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Teilnehmer' : 'Submitters'}</th>
+                <th className="py-2 font-semibold">{lang === 'de' ? 'Abschlussrate' : 'Completion %'}</th>
               </tr>
             </thead>
             <tbody>
@@ -170,8 +184,11 @@ function DashboardTab() {
                   <td className="py-2 pr-4 text-slate-500">{s.schedule}</td>
                   <td className="py-2 pr-4">{s.patients}</td>
                   <td className="py-2 pr-4">{s.totalResponses}</td>
+                  <td className="py-2 pr-4">{s.uniqueSubmitters ?? '—'}</td>
                   <td className="py-2">
-                    {s.patients > 0 ? (s.totalResponses / s.patients).toFixed(1) : '—'}
+                    <span className={clsx('font-semibold', (s.completionPct ?? 0) >= 80 ? 'text-green-600' : (s.completionPct ?? 0) >= 50 ? 'text-amber-600' : 'text-red-500')}>
+                      {s.completionPct != null ? `${s.completionPct}%` : '—'}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -184,7 +201,7 @@ function DashboardTab() {
 }
 
 // ── Patient Management Tab ────────────────────────────────────────────────────
-function PatientsTab({ shifts }: { shifts: Shift[] }) {
+function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
@@ -280,22 +297,17 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
   }
 
   async function deactivatePatient(id: number) {
-    if (!confirm('Mark this patient as dropped out?')) return
+    if (!confirm(lang === 'de' ? 'Patient als ausgeschieden markieren?' : 'Mark this patient as dropped out?')) return
     await fetch(`/api/patients/${id}`, { method: 'DELETE' })
     loadPatients()
   }
 
-  const visible = patients.filter((p) => {
-    if (filterActive ? !p.isActive : p.isActive) return false
-    if (centerFilter !== 'all' && p.center !== centerFilter) return false
-    return true
-  })
-
+  const days = DAY_LABELS[lang]
   const scheduleLabel = (p: Patient) => {
-    if (p.dialysisSchedule === 'MWF') return 'MMF'
-    if (p.dialysisSchedule === 'TThS') return 'DiDoSa'
+    if (p.dialysisSchedule === 'MWF') return 'MWF'
+    if (p.dialysisSchedule === 'TThS') return 'TThS'
     if (p.dialysisSchedule === 'custom' && p.customDialysisDays) {
-      return p.customDialysisDays.split(',').map(Number).map((d) => DAY_LABELS[d]).join('-')
+      return p.customDialysisDays.split(',').map(Number).map((d) => days[d]).join('-')
     }
     return p.dialysisSchedule
   }
@@ -307,39 +319,43 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex gap-2 flex-wrap">
           <button onClick={() => setFilterActive(true)} className={clsx('px-3 py-1.5 rounded-lg text-sm font-semibold transition', filterActive ? 'bg-blue-700 text-white' : 'bg-white border border-slate-200 text-slate-600')}>
-            Active ({patients.filter(p => p.isActive).length})
+            {lang === 'de' ? 'Aktiv' : 'Active'} ({patients.filter(p => p.isActive).length})
           </button>
           <button onClick={() => setFilterActive(false)} className={clsx('px-3 py-1.5 rounded-lg text-sm font-semibold transition', !filterActive ? 'bg-blue-700 text-white' : 'bg-white border border-slate-200 text-slate-600')}>
-            Dropped Out ({patients.filter(p => !p.isActive).length})
+            {lang === 'de' ? 'Ausgeschieden' : 'Dropped Out'} ({patients.filter(p => !p.isActive).length})
           </button>
           <select value={centerFilter} onChange={(e) => setCenterFilter(e.target.value)}
             className="px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-slate-600 bg-white">
-            <option value="all">All Centers</option>
+            <option value="all">{lang === 'de' ? 'Alle Zentren' : 'All Centers'}</option>
             {CENTERS.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <button onClick={openAdd} className="bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800 transition">
-          + Add Patient
+          {lang === 'de' ? '+ Patient hinzufügen' : '+ Add Patient'}
         </button>
       </div>
 
-      {loading && <div className="text-center py-8 text-slate-400">Loading…</div>}
+      {loading && <div className="text-center py-8 text-slate-400">{lang === 'de' ? 'Lade…' : 'Loading…'}</div>}
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50">
             <tr className="text-left text-slate-500 border-b">
               <th className="py-3 px-4 font-semibold">Code</th>
-              <th className="py-3 px-4 font-semibold">Center</th>
-              <th className="py-3 px-4 font-semibold">Schedule</th>
-              <th className="py-3 px-4 font-semibold">Shift</th>
-              <th className="py-3 px-4 font-semibold">Enrolled</th>
-              <th className="py-3 px-4 font-semibold">Sessions</th>
-              <th className="py-3 px-4 font-semibold">Actions</th>
+              <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Zentrum' : 'Center'}</th>
+              <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Turnus' : 'Schedule'}</th>
+              <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Schicht' : 'Shift'}</th>
+              <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Einschr.' : 'Enrolled'}</th>
+              <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Sitzungen' : 'Sessions'}</th>
+              <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Aktionen' : 'Actions'}</th>
             </tr>
           </thead>
           <tbody>
-            {visible.map((p) => (
+            {patients.filter((p) => {
+              if (filterActive ? !p.isActive : p.isActive) return false
+              if (centerFilter !== 'all' && p.center !== centerFilter) return false
+              return true
+            }).map((p) => (
               <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50">
                 <td className="py-2.5 px-4 font-mono font-semibold text-blue-700">{p.patientCode}</td>
                 <td className="py-2.5 px-4 text-slate-600">{p.center}</td>
@@ -348,56 +364,77 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
                 <td className="py-2.5 px-4 text-slate-500">{p.enrollmentDate.slice(0, 10)}</td>
                 <td className="py-2.5 px-4">{p._count.promResponses}</td>
                 <td className="py-2.5 px-4 flex gap-2">
-                  <button onClick={() => openEdit(p)} className="text-blue-600 hover:underline text-xs">Edit</button>
+                  <button onClick={() => openEdit(p)} className="text-blue-600 hover:underline text-xs">
+                    {lang === 'de' ? 'Bearbeiten' : 'Edit'}
+                  </button>
                   {p.isActive && (
-                    <button onClick={() => deactivatePatient(p.id)} className="text-red-500 hover:underline text-xs">Drop out</button>
+                    <button onClick={() => deactivatePatient(p.id)} className="text-red-500 hover:underline text-xs">
+                      {lang === 'de' ? 'Ausscheiden' : 'Drop out'}
+                    </button>
                   )}
                 </td>
               </tr>
             ))}
-            {visible.length === 0 && (
-              <tr><td colSpan={7} className="py-8 text-center text-slate-400">No patients found</td></tr>
+            {patients.filter((p) => filterActive ? p.isActive : !p.isActive).length === 0 && (
+              <tr><td colSpan={7} className="py-8 text-center text-slate-400">
+                {lang === 'de' ? 'Keine Patienten gefunden' : 'No patients found'}
+              </td></tr>
             )}
           </tbody>
         </table>
       </div>
 
       {showAdd && (
-        <Modal title={editPatient ? `Edit: ${editPatient.patientCode}` : 'Add New Patient'} onClose={() => setShowAdd(false)}>
+        <Modal
+          title={editPatient
+            ? `${lang === 'de' ? 'Bearbeiten' : 'Edit'}: ${editPatient.patientCode}`
+            : (lang === 'de' ? 'Neuen Patienten hinzufügen' : 'Add New Patient')}
+          onClose={() => setShowAdd(false)}
+        >
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">Patient Code * (HMY-XXXX)</label>
+              <label className="block text-sm font-semibold text-slate-600 mb-1">
+                {lang === 'de' ? 'Patientencode * (HMY-XXXX)' : 'Patient Code * (HMY-XXXX)'}
+              </label>
               <input value={form.patientCode} onChange={(e) => setForm((f) => ({ ...f, patientCode: e.target.value.toUpperCase() }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 font-mono focus:outline-none focus:border-blue-500" placeholder="HMY-0001" maxLength={8} />
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-600 mb-1">
-                {editPatient ? 'New PIN (leave blank to keep)' : 'PIN (6 digits) *'}
+                {editPatient
+                  ? (lang === 'de' ? 'Neue PIN (leer lassen = unverändert)' : 'New PIN (leave blank to keep)')
+                  : (lang === 'de' ? 'PIN (6 Stellen) *' : 'PIN (6 digits) *')}
               </label>
               <input
                 type="text" inputMode="numeric" pattern="\d{6}" maxLength={6}
                 value={form.pin} onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '') }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-                placeholder="e.g. 123456"
+                placeholder={lang === 'de' ? 'z.B. 123456' : 'e.g. 123456'}
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">Center *</label>
+              <label className="block text-sm font-semibold text-slate-600 mb-1">
+                {lang === 'de' ? 'Zentrum *' : 'Center *'}
+              </label>
               <select value={form.center} onChange={(e) => setForm((f) => ({ ...f, center: e.target.value }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
                 {CENTERS.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">Dialysis Schedule *</label>
+              <label className="block text-sm font-semibold text-slate-600 mb-1">
+                {lang === 'de' ? 'Dialyseturnus *' : 'Dialysis Schedule *'}
+              </label>
               <select value={form.dialysisSchedule} onChange={(e) => setForm((f) => ({ ...f, dialysisSchedule: e.target.value }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
-                {SCHEDULE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {SCHEDULE_OPTIONS[lang].map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
             {form.dialysisSchedule === 'custom' && (
               <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-2">Dialyse-Tage auswählen</label>
+                <label className="block text-sm font-semibold text-slate-600 mb-2">
+                  {lang === 'de' ? 'Dialysetage auswählen' : 'Select dialysis days'}
+                </label>
                 <div className="flex gap-2 flex-wrap">
                   {[1, 2, 3, 4, 5, 6, 0].map((day) => (
                     <button
@@ -411,45 +448,57 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
                           : 'bg-white text-slate-600 border-slate-300 hover:border-blue-400'
                       )}
                     >
-                      {DAY_LABELS[day]}
+                      {days[day]}
                     </button>
                   ))}
                 </div>
               </div>
             )}
             <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">Shift *</label>
+              <label className="block text-sm font-semibold text-slate-600 mb-1">
+                {lang === 'de' ? 'Schicht *' : 'Shift *'}
+              </label>
               <select value={form.shiftId} onChange={(e) => setForm((f) => ({ ...f, shiftId: e.target.value }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
                 {shifts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">Enrollment Date *</label>
+              <label className="block text-sm font-semibold text-slate-600 mb-1">
+                {lang === 'de' ? 'Einschreibedatum *' : 'Enrollment Date *'}
+              </label>
               <input type="date" value={form.enrollmentDate} onChange={(e) => setForm((f) => ({ ...f, enrollmentDate: e.target.value }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">Target Dry Weight (kg, optional)</label>
+              <label className="block text-sm font-semibold text-slate-600 mb-1">
+                {lang === 'de' ? 'Zielgewicht (kg, optional)' : 'Target Dry Weight (kg, optional)'}
+              </label>
               <input
                 type="number" step="0.1" min="30" max="200"
                 value={form.dryWeight} onChange={(e) => setForm((f) => ({ ...f, dryWeight: e.target.value }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-                placeholder="e.g. 68.5"
+                placeholder={lang === 'de' ? 'z.B. 68,5' : 'e.g. 68.5'}
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">Notes (optional)</label>
+              <label className="block text-sm font-semibold text-slate-600 mb-1">
+                {lang === 'de' ? 'Notizen (optional)' : 'Notes (optional)'}
+              </label>
               <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 resize-none" rows={2} />
             </div>
             {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg p-3">{error}</p>}
             <div className="flex gap-3 pt-2">
               <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-semibold">
-                Cancel
+                {lang === 'de' ? 'Abbrechen' : 'Cancel'}
               </button>
               <button onClick={savePatient} disabled={saving} className="flex-1 py-2.5 rounded-lg bg-blue-700 text-white font-semibold hover:bg-blue-800 disabled:opacity-50">
-                {saving ? 'Saving…' : editPatient ? 'Update' : 'Create Patient'}
+                {saving
+                  ? (lang === 'de' ? 'Speichert…' : 'Saving…')
+                  : editPatient
+                  ? (lang === 'de' ? 'Aktualisieren' : 'Update')
+                  : (lang === 'de' ? 'Patient anlegen' : 'Create Patient')}
               </button>
             </div>
           </div>
@@ -460,7 +509,7 @@ function PatientsTab({ shifts }: { shifts: Shift[] }) {
 }
 
 // ── Provider Management Tab ───────────────────────────────────────────────────
-function ProvidersTab({ shifts }: { shifts: Shift[] }) {
+function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
@@ -521,23 +570,23 @@ function ProvidersTab({ shifts }: { shifts: Shift[] }) {
     <div className="space-y-4">
       <div className="flex justify-end">
         <button onClick={openAdd} className="bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800 transition">
-          + Add Provider
+          {lang === 'de' ? '+ Mitarbeiter hinzufügen' : '+ Add Provider'}
         </button>
       </div>
 
-      {loading && <div className="text-center py-8 text-slate-400">Loading…</div>}
+      {loading && <div className="text-center py-8 text-slate-400">{lang === 'de' ? 'Lade…' : 'Loading…'}</div>}
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50">
             <tr className="text-left text-slate-500 border-b">
-              <th className="py-3 px-4 font-semibold">Name</th>
-              <th className="py-3 px-4 font-semibold">Username</th>
-              <th className="py-3 px-4 font-semibold">Role</th>
-              <th className="py-3 px-4 font-semibold">Center</th>
-              <th className="py-3 px-4 font-semibold">Shift</th>
+              <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Name' : 'Name'}</th>
+              <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Benutzername' : 'Username'}</th>
+              <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Rolle' : 'Role'}</th>
+              <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Zentrum' : 'Center'}</th>
+              <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Schicht' : 'Shift'}</th>
               <th className="py-3 px-4 font-semibold">Status</th>
-              <th className="py-3 px-4 font-semibold">Actions</th>
+              <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Aktionen' : 'Actions'}</th>
             </tr>
           </thead>
           <tbody>
@@ -547,18 +596,20 @@ function ProvidersTab({ shifts }: { shifts: Shift[] }) {
                 <td className="py-2.5 px-4 text-slate-500 font-mono text-xs">{p.username}</td>
                 <td className="py-2.5 px-4">
                   <span className={clsx('px-2 py-0.5 rounded text-xs font-semibold', p.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700')}>
-                    {p.role}
+                    {p.role === 'admin' ? 'Admin' : (lang === 'de' ? 'Mitarbeiter' : 'Provider')}
                   </span>
                 </td>
                 <td className="py-2.5 px-4 text-slate-500">{p.center ?? '—'}</td>
                 <td className="py-2.5 px-4 text-slate-500">{p.shift?.name ?? '—'}</td>
                 <td className="py-2.5 px-4">
                   <span className={clsx('text-xs font-semibold', p.isActive ? 'text-green-600' : 'text-slate-400')}>
-                    {p.isActive ? 'Active' : 'Inactive'}
+                    {p.isActive ? (lang === 'de' ? 'Aktiv' : 'Active') : (lang === 'de' ? 'Inaktiv' : 'Inactive')}
                   </span>
                 </td>
                 <td className="py-2.5 px-4">
-                  <button onClick={() => openEdit(p)} className="text-blue-600 hover:underline text-xs">Edit</button>
+                  <button onClick={() => openEdit(p)} className="text-blue-600 hover:underline text-xs">
+                    {lang === 'de' ? 'Bearbeiten' : 'Edit'}
+                  </button>
                 </td>
               </tr>
             ))}
@@ -567,49 +618,66 @@ function ProvidersTab({ shifts }: { shifts: Shift[] }) {
       </div>
 
       {showAdd && (
-        <Modal title={editProvider ? `Edit: ${editProvider.name}` : 'Add Provider'} onClose={() => setShowAdd(false)}>
+        <Modal
+          title={editProvider
+            ? `${lang === 'de' ? 'Bearbeiten' : 'Edit'}: ${editProvider.name}`
+            : (lang === 'de' ? 'Mitarbeiter hinzufügen' : 'Add Provider')}
+          onClose={() => setShowAdd(false)}
+        >
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">Full Name *</label>
+              <label className="block text-sm font-semibold text-slate-600 mb-1">
+                {lang === 'de' ? 'Vollständiger Name *' : 'Full Name *'}
+              </label>
               <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" placeholder="Dr. Anna Beispiel" />
             </div>
             {!editProvider && (
               <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1">Username *</label>
+                <label className="block text-sm font-semibold text-slate-600 mb-1">
+                  {lang === 'de' ? 'Benutzername *' : 'Username *'}
+                </label>
                 <input value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
                   className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" placeholder="a.beispiel" />
               </div>
             )}
             <div>
               <label className="block text-sm font-semibold text-slate-600 mb-1">
-                {editProvider ? 'New Password (leave blank to keep)' : 'Password * (min. 8 chars)'}
+                {editProvider
+                  ? (lang === 'de' ? 'Neues Passwort (leer lassen = unverändert)' : 'New Password (leave blank to keep)')
+                  : (lang === 'de' ? 'Passwort * (mind. 8 Zeichen)' : 'Password * (min. 8 chars)')}
               </label>
               <input type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" placeholder="••••••••" />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">Role *</label>
+              <label className="block text-sm font-semibold text-slate-600 mb-1">
+                {lang === 'de' ? 'Rolle *' : 'Role *'}
+              </label>
               <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
-                <option value="provider">Provider (Nurse / Physician)</option>
+                <option value="provider">{lang === 'de' ? 'Pflegepersonal / Arzt' : 'Provider (Nurse / Physician)'}</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
             {form.role === 'provider' && (
               <>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1">Center *</label>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1">
+                    {lang === 'de' ? 'Zentrum *' : 'Center *'}
+                  </label>
                   <select value={form.center} onChange={(e) => setForm((f) => ({ ...f, center: e.target.value }))}
                     className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
                     {CENTERS.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1">Assigned Shift</label>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1">
+                    {lang === 'de' ? 'Zugewiesene Schicht' : 'Assigned Shift'}
+                  </label>
                   <select value={form.shiftId} onChange={(e) => setForm((f) => ({ ...f, shiftId: e.target.value }))}
                     className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
-                    <option value="">— No shift —</option>
+                    <option value="">{lang === 'de' ? '— Keine Schicht —' : '— No shift —'}</option>
                     {shifts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
@@ -617,9 +685,15 @@ function ProvidersTab({ shifts }: { shifts: Shift[] }) {
             )}
             {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg p-3">{error}</p>}
             <div className="flex gap-3 pt-2">
-              <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-semibold">Cancel</button>
+              <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-semibold">
+                {lang === 'de' ? 'Abbrechen' : 'Cancel'}
+              </button>
               <button onClick={saveProvider} disabled={saving} className="flex-1 py-2.5 rounded-lg bg-blue-700 text-white font-semibold hover:bg-blue-800 disabled:opacity-50">
-                {saving ? 'Saving…' : editProvider ? 'Update' : 'Create Provider'}
+                {saving
+                  ? (lang === 'de' ? 'Speichert…' : 'Saving…')
+                  : editProvider
+                  ? (lang === 'de' ? 'Aktualisieren' : 'Update')
+                  : (lang === 'de' ? 'Mitarbeiter anlegen' : 'Create Provider')}
               </button>
             </div>
           </div>
@@ -630,7 +704,7 @@ function ProvidersTab({ shifts }: { shifts: Shift[] }) {
 }
 
 // ── Config Tab ────────────────────────────────────────────────────────────────
-function ConfigTab() {
+function ConfigTab({ lang }: { lang: Lang }) {
   const [config, setConfig] = useState<any>(null)
   const [startDate, setStartDate] = useState('')
   const [studyName, setStudyName] = useState('HARMONY')
@@ -667,38 +741,56 @@ function ConfigTab() {
     }
   }
 
+  const TP_LABELS: Record<string, { en: string; de: string }> = {
+    yesterday: { en: 'yesterday', de: 'gestern' },
+    arrival:   { en: 'arrival',   de: 'Ankunft' },
+    now:       { en: 'now',       de: 'jetzt' },
+  }
+
   return (
     <div className="max-w-lg space-y-6">
       <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
-        <h3 className="font-bold text-slate-800 text-lg">Study Configuration</h3>
+        <h3 className="font-bold text-slate-800 text-lg">
+          {lang === 'de' ? 'Studien-Konfiguration' : 'Study Configuration'}
+        </h3>
 
         {config?.isActive && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-            <p className="text-green-800 font-semibold">Study is ACTIVE</p>
-            <p className="text-green-700 text-sm">Current week: {config.currentStudyWeek} / 12</p>
-            <p className="text-green-700 text-sm">Current timepoint: {config.currentTimepoint}</p>
+            <p className="text-green-800 font-semibold">{lang === 'de' ? 'Studie AKTIV' : 'Study is ACTIVE'}</p>
+            <p className="text-green-700 text-sm">{lang === 'de' ? 'Aktuelle Woche' : 'Current week'}: {config.currentStudyWeek} / 12</p>
+            <p className="text-green-700 text-sm">{lang === 'de' ? 'Aktueller Zeitpunkt' : 'Current timepoint'}: {config.currentTimepoint}</p>
           </div>
         )}
 
         {config && !config.isActive && config.configured && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-            <p className="text-amber-800 font-semibold">Study is not active</p>
-            <p className="text-amber-700 text-sm">Check the start date — study may be in the future or already completed.</p>
+            <p className="text-amber-800 font-semibold">{lang === 'de' ? 'Studie nicht aktiv' : 'Study is not active'}</p>
+            <p className="text-amber-700 text-sm">
+              {lang === 'de'
+                ? 'Startdatum prüfen — Studie liegt in der Zukunft oder ist bereits abgeschlossen.'
+                : 'Check the start date — study may be in the future or already completed.'}
+            </p>
           </div>
         )}
 
         <div>
-          <label className="block text-sm font-semibold text-slate-600 mb-1">Study Name</label>
+          <label className="block text-sm font-semibold text-slate-600 mb-1">
+            {lang === 'de' ? 'Studienname' : 'Study Name'}
+          </label>
           <input value={studyName} onChange={(e) => setStudyName(e.target.value)}
             className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" />
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-600 mb-1">Study Start Date *</label>
+          <label className="block text-sm font-semibold text-slate-600 mb-1">
+            {lang === 'de' ? 'Studienstartdatum *' : 'Study Start Date *'}
+          </label>
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
             className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" />
           <p className="text-slate-400 text-xs mt-1">
-            Week 1 starts on this date. The timepoint cycle (yesterday → arrival → now) repeats every 3 weeks.
+            {lang === 'de'
+              ? 'Woche 1 beginnt an diesem Datum. Der Zeitpunktzyklus (gestern → Ankunft → jetzt) wiederholt sich alle 3 Wochen.'
+              : 'Week 1 starts on this date. The timepoint cycle (yesterday → arrival → now) repeats every 3 weeks.'}
           </p>
         </div>
 
@@ -706,12 +798,18 @@ function ConfigTab() {
 
         <button onClick={save} disabled={saving || !startDate}
           className={clsx('w-full py-3 rounded-xl font-semibold transition', saved ? 'bg-green-600 text-white' : 'bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-50')}>
-          {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Configuration'}
+          {saving
+            ? (lang === 'de' ? 'Speichert…' : 'Saving…')
+            : saved
+            ? (lang === 'de' ? 'Gespeichert!' : 'Saved!')
+            : (lang === 'de' ? 'Konfiguration speichern' : 'Save Configuration')}
         </button>
       </div>
 
       <div className="bg-white rounded-xl p-6 shadow-sm">
-        <h3 className="font-bold text-slate-800 mb-3">Timepoint Cycle Reference</h3>
+        <h3 className="font-bold text-slate-800 mb-3">
+          {lang === 'de' ? 'Zeitpunktzyklus-Referenz' : 'Timepoint Cycle Reference'}
+        </h3>
         <div className="space-y-2 text-sm">
           {[1,2,3,4,5,6,7,8,9,10,11,12].map((week) => {
             const cycle = ((week - 1) % 3)
@@ -719,8 +817,10 @@ function ConfigTab() {
             const colors: Record<string, string> = { yesterday: 'bg-blue-50 text-blue-700', arrival: 'bg-amber-50 text-amber-700', now: 'bg-green-50 text-green-700' }
             return (
               <div key={week} className="flex items-center gap-3">
-                <span className="text-slate-500 w-14">Week {week}</span>
-                <span className={clsx('px-2 py-0.5 rounded text-xs font-semibold', colors[tp])}>{tp}</span>
+                <span className="text-slate-500 w-16">{lang === 'de' ? 'Woche' : 'Week'} {week}</span>
+                <span className={clsx('px-2 py-0.5 rounded text-xs font-semibold', colors[tp])}>
+                  {TP_LABELS[tp][lang]}
+                </span>
               </div>
             )
           })}
@@ -731,7 +831,7 @@ function ConfigTab() {
 }
 
 // ── CSV Import Tab ────────────────────────────────────────────────────────────
-function ImportTab() {
+function ImportTab({ lang }: { lang: Lang }) {
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [result, setResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null)
@@ -759,24 +859,31 @@ function ImportTab() {
   return (
     <div className="max-w-2xl space-y-6">
       <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
-        <h3 className="font-bold text-slate-800 text-lg">Import Clinical / Dialysis Data</h3>
+        <h3 className="font-bold text-slate-800 text-lg">
+          {lang === 'de' ? 'Klinische / Dialysedaten importieren' : 'Import Clinical / Dialysis Data'}
+        </h3>
         <p className="text-slate-500 text-sm">
-          Upload a CSV file with one row per patient per session date. Patient codes (HMY-XXXX) must match exactly.
+          {lang === 'de'
+            ? 'CSV-Datei hochladen mit einer Zeile pro Patient und Sitzungsdatum. Patientencodes (HMY-XXXX) müssen exakt übereinstimmen.'
+            : 'Upload a CSV file with one row per patient per session date. Patient codes (HMY-XXXX) must match exactly.'}
         </p>
 
-        {/* Expected format */}
         <div className="bg-slate-50 rounded-xl p-4 font-mono text-xs text-slate-600 overflow-x-auto">
-          <p className="font-semibold text-slate-700 mb-1 font-sans text-xs">Expected CSV columns (header row required):</p>
+          <p className="font-semibold text-slate-700 mb-1 font-sans text-xs">
+            {lang === 'de' ? 'Erwartete CSV-Spalten (Kopfzeile erforderlich):' : 'Expected CSV columns (header row required):'}
+          </p>
           <p>patient_code, date, pre_dialysis_weight, idwg, systolic_bp, diastolic_bp</p>
           <p className="mt-2 text-slate-400 font-sans">
-            Column names are flexible — e.g. "code", "weight", "sbp" are also accepted.<br />
-            Date format: YYYY-MM-DD &nbsp;·&nbsp; All clinical columns are optional.<br />
-            Existing rows for the same patient + date are updated (upsert).
+            {lang === 'de'
+              ? <>Spaltennamen sind flexibel — z.B. „code", „weight", „sbp" werden ebenfalls akzeptiert.<br />Datumsformat: JJJJ-MM-TT &nbsp;·&nbsp; Alle klinischen Spalten sind optional.<br />Bestehende Zeilen für denselben Patienten + Datum werden aktualisiert (Upsert).</>
+              : <>Column names are flexible — e.g. "code", "weight", "sbp" are also accepted.<br />Date format: YYYY-MM-DD &nbsp;·&nbsp; All clinical columns are optional.<br />Existing rows for the same patient + date are updated (upsert).</>}
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-600 mb-2">Select CSV file</label>
+          <label className="block text-sm font-semibold text-slate-600 mb-2">
+            {lang === 'de' ? 'CSV-Datei auswählen' : 'Select CSV file'}
+          </label>
           <input
             type="file"
             accept=".csv,text/csv"
@@ -792,26 +899,32 @@ function ImportTab() {
           disabled={!file || uploading}
           className="w-full py-3 rounded-xl bg-blue-700 text-white font-semibold hover:bg-blue-800 disabled:opacity-40 transition"
         >
-          {uploading ? 'Importing…' : 'Upload & Import'}
+          {uploading
+            ? (lang === 'de' ? 'Importiert…' : 'Importing…')
+            : (lang === 'de' ? 'Hochladen & Importieren' : 'Upload & Import')}
         </button>
       </div>
 
       {result && (
         <div className="bg-white rounded-xl p-6 shadow-sm space-y-3">
-          <h4 className="font-bold text-slate-800">Import Result</h4>
+          <h4 className="font-bold text-slate-800">
+            {lang === 'de' ? 'Importergebnis' : 'Import Result'}
+          </h4>
           <div className="flex gap-4">
             <div className="bg-green-50 border border-green-200 rounded-xl px-5 py-3 text-center">
               <p className="text-2xl font-black text-green-700">{result.imported}</p>
-              <p className="text-xs text-green-600 font-semibold">Imported</p>
+              <p className="text-xs text-green-600 font-semibold">{lang === 'de' ? 'Importiert' : 'Imported'}</p>
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 text-center">
               <p className="text-2xl font-black text-amber-700">{result.skipped}</p>
-              <p className="text-xs text-amber-600 font-semibold">Skipped</p>
+              <p className="text-xs text-amber-600 font-semibold">{lang === 'de' ? 'Übersprungen' : 'Skipped'}</p>
             </div>
           </div>
           {result.errors.length > 0 && (
             <div>
-              <p className="text-sm font-semibold text-red-600 mb-2">Errors ({result.errors.length}):</p>
+              <p className="text-sm font-semibold text-red-600 mb-2">
+                {lang === 'de' ? `Fehler (${result.errors.length}):` : `Errors (${result.errors.length}):`}
+              </p>
               <div className="bg-red-50 rounded-xl p-3 max-h-48 overflow-y-auto space-y-1">
                 {result.errors.map((e, i) => (
                   <p key={i} className="text-xs text-red-700 font-mono">{e}</p>
@@ -825,67 +938,478 @@ function ImportTab() {
   )
 }
 
+// ── Usage / Activity Tab ──────────────────────────────────────────────────────
+interface PatientActivity { patientId: number; patientCode: string; center: string; isActive: boolean; loginCount: number; promCount: number; lastLogin: string | null; lastProm: string | null }
+interface ProviderActivity { providerId: number; name: string; center: string | null; role: string; isActive: boolean; loginCount: number; viewCount: number; lastLogin: string | null; lastView: string | null }
+interface CenterActivity { center: string; patientLogins: number; providerLogins: number; promSubmits: number; dataViews: number }
+interface DailyActivity { date: string; logins: number; proms: number; views: number }
+interface ActivityData { patientActivity: PatientActivity[]; providerActivity: ProviderActivity[]; centerActivity: CenterActivity[]; dailyActivity: DailyActivity[] }
+
+function fmt(iso: string | null): string {
+  if (!iso) return '—'
+  return format(parseISO(iso), 'dd.MM.yy HH:mm')
+}
+
+function UsageTab({ lang, siteFilter }: { lang: Lang; siteFilter: string }) {
+  const [data, setData] = useState<ActivityData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [patientSort, setPatientSort] = useState<'loginCount' | 'promCount'>('loginCount')
+  const [centerFilter, setCenterFilter] = useState<string>(siteFilter)
+  useEffect(() => { setCenterFilter(siteFilter) }, [siteFilter])
+
+  useEffect(() => {
+    fetch('/api/admin/activity').then((r) => r.json()).then(setData).finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="text-center py-12 text-slate-400">{lang === 'de' ? 'Lade Nutzungsdaten…' : 'Loading usage data…'}</div>
+  if (!data) return <div className="text-center py-12 text-red-400">{lang === 'de' ? 'Laden fehlgeschlagen' : 'Failed to load'}</div>
+
+  const maxDaily = Math.max(...data.dailyActivity.map((d) => d.logins + d.proms + d.views), 1)
+
+  const filteredPatients = data.patientActivity
+    .filter((p) => centerFilter === 'all' || p.center === centerFilter)
+    .sort((a, b) => b[patientSort] - a[patientSort])
+
+  return (
+    <div className="space-y-6">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard
+          label={lang === 'de' ? 'Logins gesamt' : 'Total Logins'}
+          value={data.patientActivity.reduce((s, p) => s + p.loginCount, 0) + data.providerActivity.reduce((s, p) => s + p.loginCount, 0)}
+          color="blue"
+        />
+        <StatCard
+          label={lang === 'de' ? 'Patienten-Logins' : 'Patient Logins'}
+          value={data.patientActivity.reduce((s, p) => s + p.loginCount, 0)}
+          color="blue"
+        />
+        <StatCard
+          label={lang === 'de' ? 'PROM-Eingaben' : 'PROM Submits'}
+          value={data.patientActivity.reduce((s, p) => s + p.promCount, 0)}
+          color="green"
+        />
+        <StatCard
+          label={lang === 'de' ? 'Datenanzeigen' : 'Data Views'}
+          value={data.providerActivity.reduce((s, p) => s + p.viewCount, 0)}
+          color="amber"
+        />
+      </div>
+
+      {/* Daily activity chart (last 30d) */}
+      <div className="bg-white rounded-xl p-4 shadow-sm">
+        <h3 className="font-semibold text-slate-700 mb-3 text-sm">
+          {lang === 'de' ? 'Tägliche Aktivität (letzte 30 Tage)' : 'Daily Activity (last 30 days)'}
+        </h3>
+        <div className="flex items-end gap-0.5 h-24 w-full">
+          {data.dailyActivity.map((d) => {
+            const total = d.logins + d.proms + d.views
+            const loginH = Math.round((d.logins / maxDaily) * 100)
+            const promH  = Math.round((d.proms  / maxDaily) * 100)
+            const viewH  = Math.round((d.views  / maxDaily) * 100)
+            return (
+              <div key={d.date} className="flex-1 flex flex-col justify-end gap-0" title={`${d.date}\n${lang === 'de' ? 'Logins' : 'Logins'}: ${d.logins}\nPROMs: ${d.proms}\n${lang === 'de' ? 'Ansichten' : 'Views'}: ${d.views}`}>
+                {viewH > 0  && <div style={{ height: `${viewH}%` }}  className="bg-amber-400 rounded-sm" />}
+                {promH > 0  && <div style={{ height: `${promH}%` }}  className="bg-green-500 rounded-sm" />}
+                {loginH > 0 && <div style={{ height: `${loginH}%` }} className="bg-blue-500 rounded-sm" />}
+                {total === 0 && <div className="h-0.5 bg-slate-100 rounded-sm" />}
+              </div>
+            )
+          })}
+        </div>
+        <div className="flex gap-4 mt-2 text-xs text-slate-500">
+          <span><span className="inline-block w-3 h-3 rounded bg-blue-500 mr-1 align-middle" />{lang === 'de' ? 'Logins' : 'Logins'}</span>
+          <span><span className="inline-block w-3 h-3 rounded bg-green-500 mr-1 align-middle" />PROMs</span>
+          <span><span className="inline-block w-3 h-3 rounded bg-amber-400 mr-1 align-middle" />{lang === 'de' ? 'Ansichten' : 'Views'}</span>
+        </div>
+      </div>
+
+      {/* Per-center summary */}
+      <div className="bg-white rounded-xl p-4 shadow-sm">
+        <h3 className="font-semibold text-slate-700 mb-3 text-sm">{lang === 'de' ? 'Nutzung je Zentrum (gesamt)' : 'Usage by Center (all-time)'}</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-slate-500 border-b text-xs uppercase tracking-wide">
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Zentrum' : 'Center'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Pat.-Logins' : 'Pat. Logins'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'MA-Logins' : 'Staff Logins'}</th>
+                <th className="py-2 pr-4 font-semibold">PROMs</th>
+                <th className="py-2 font-semibold">{lang === 'de' ? 'Ansichten' : 'Views'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.centerActivity.map((c) => (
+                <tr key={c.center} className="border-b border-slate-50">
+                  <td className="py-2 pr-4 font-medium">{c.center}</td>
+                  <td className="py-2 pr-4">{c.patientLogins}</td>
+                  <td className="py-2 pr-4">{c.providerLogins}</td>
+                  <td className="py-2 pr-4">{c.promSubmits}</td>
+                  <td className="py-2">{c.dataViews}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Per-provider activity */}
+      <div className="bg-white rounded-xl p-4 shadow-sm">
+        <h3 className="font-semibold text-slate-700 mb-3 text-sm">{lang === 'de' ? 'Mitarbeiter-Aktivität (gesamt)' : 'Provider Activity (all-time)'}</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-slate-500 border-b text-xs uppercase tracking-wide">
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Name' : 'Name'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Rolle' : 'Role'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Zentrum' : 'Center'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Logins' : 'Logins'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Ansichten' : 'Views'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Letzter Login' : 'Last Login'}</th>
+                <th className="py-2 font-semibold">{lang === 'de' ? 'Letzte Ansicht' : 'Last View'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.providerActivity.map((p) => (
+                <tr key={p.providerId} className="border-b border-slate-50 hover:bg-slate-50">
+                  <td className="py-2 pr-4 font-medium">{p.name}</td>
+                  <td className="py-2 pr-4">
+                    <span className={clsx('px-2 py-0.5 rounded text-xs font-semibold', p.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700')}>
+                      {p.role === 'admin' ? 'Admin' : (lang === 'de' ? 'Mitarbeiter' : 'Provider')}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-4 text-slate-500">{p.center ?? '—'}</td>
+                  <td className="py-2 pr-4 font-semibold">{p.loginCount}</td>
+                  <td className="py-2 pr-4 font-semibold">{p.viewCount}</td>
+                  <td className="py-2 pr-4 text-slate-500 text-xs">{fmt(p.lastLogin)}</td>
+                  <td className="py-2 text-slate-500 text-xs">{fmt(p.lastView)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Per-patient activity */}
+      <div className="bg-white rounded-xl p-4 shadow-sm">
+        <div className="flex items-center gap-3 mb-3 flex-wrap">
+          <h3 className="font-semibold text-slate-700 text-sm">{lang === 'de' ? 'Patienten-Aktivität (gesamt)' : 'Patient Activity (all-time)'}</h3>
+          <select value={centerFilter} onChange={(e) => setCenterFilter(e.target.value)}
+            className="ml-auto text-xs border border-slate-200 rounded-lg px-2 py-1 text-slate-600 bg-white">
+            <option value="all">{lang === 'de' ? 'Alle Zentren' : 'All Centers'}</option>
+            {CENTERS.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <div className="flex gap-1">
+            <button onClick={() => setPatientSort('loginCount')}
+              className={clsx('text-xs px-2 py-1 rounded-lg border transition', patientSort === 'loginCount' ? 'bg-blue-700 text-white border-blue-700' : 'border-slate-200 text-slate-600')}>
+              {lang === 'de' ? 'Logins' : 'Logins'}
+            </button>
+            <button onClick={() => setPatientSort('promCount')}
+              className={clsx('text-xs px-2 py-1 rounded-lg border transition', patientSort === 'promCount' ? 'bg-blue-700 text-white border-blue-700' : 'border-slate-200 text-slate-600')}>
+              PROMs
+            </button>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-slate-500 border-b text-xs uppercase tracking-wide">
+                <th className="py-2 pr-4 font-semibold">Code</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Zentrum' : 'Center'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Logins' : 'Logins'}</th>
+                <th className="py-2 pr-4 font-semibold">PROMs</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Letzter Login' : 'Last Login'}</th>
+                <th className="py-2 font-semibold">{lang === 'de' ? 'Letztes PROM' : 'Last PROM'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPatients.map((p) => (
+                <tr key={p.patientId} className={clsx('border-b border-slate-50 hover:bg-slate-50', !p.isActive && 'opacity-50')}>
+                  <td className="py-2 pr-4 font-mono font-semibold text-blue-700">{p.patientCode}</td>
+                  <td className="py-2 pr-4 text-slate-500">{p.center}</td>
+                  <td className="py-2 pr-4">
+                    <span className={clsx('font-semibold', p.loginCount === 0 ? 'text-red-500' : p.loginCount >= 3 ? 'text-green-600' : 'text-amber-600')}>
+                      {p.loginCount}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-4">
+                    <span className={clsx('font-semibold', p.promCount === 0 ? 'text-red-500' : p.promCount >= 3 ? 'text-green-600' : 'text-amber-600')}>
+                      {p.promCount}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-4 text-slate-500 text-xs">{fmt(p.lastLogin)}</td>
+                  <td className="py-2 text-slate-500 text-xs">{fmt(p.lastProm)}</td>
+                </tr>
+              ))}
+              {filteredPatients.length === 0 && (
+                <tr><td colSpan={6} className="py-8 text-center text-slate-400">{lang === 'de' ? 'Keine Daten' : 'No data'}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Trend interfaces + helpers ────────────────────────────────────────────────
+interface PromTrendWeek {
+  week: number
+  fluidStatus: number | null
+  thirst: number | null
+  overload: number | null
+  n: number
+}
+interface ClinicalTrendWeek {
+  week: number
+  preWeight: number | null
+  idwg: number | null
+  systolic: number | null
+  diastolic: number | null
+  n: number
+}
+interface TrendsData {
+  promTrends: PromTrendWeek[]
+  clinicalTrends: ClinicalTrendWeek[]
+  center: string | null
+}
+
+function smoothTrendLine(weeks: { week: number; value: number | null }[]): Map<number, number> {
+  const withData = weeks.filter((w) => w.value !== null) as { week: number; value: number }[]
+  if (withData.length < 3) return new Map(withData.map((w) => [w.week, w.value]))
+  const smoothed = loess(withData.map((w) => w.value), 0.5)
+  const m = new Map<number, number>()
+  withData.forEach((w, i) => m.set(w.week, parseFloat(smoothed[i].toFixed(2))))
+  return m
+}
+
+// ── Verlauf Tab ────────────────────────────────────────────────────────────────
+function VerlaufTab({ lang, siteFilter }: { lang: Lang; siteFilter: string }) {
+  const [data, setData] = useState<TrendsData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    setData(null)
+    const q = siteFilter !== 'all' ? `?center=${encodeURIComponent(siteFilter)}` : ''
+    fetch(`/api/trends${q}`)
+      .then((r) => r.json())
+      .then(setData)
+      .finally(() => setLoading(false))
+  }, [siteFilter])
+
+  if (loading) return <div className="text-center py-12 text-slate-400">{lang === 'de' ? 'Lade Verlaufsdaten…' : 'Loading trend data…'}</div>
+  if (!data) return <div className="text-center py-12 text-red-400">{lang === 'de' ? 'Laden fehlgeschlagen' : 'Failed to load'}</div>
+
+  const fluidSmooth    = smoothTrendLine(data.promTrends.map((w) => ({ week: w.week, value: w.fluidStatus })))
+  const thirstSmooth   = smoothTrendLine(data.promTrends.map((w) => ({ week: w.week, value: w.thirst })))
+  const overSmooth     = smoothTrendLine(data.promTrends.map((w) => ({ week: w.week, value: w.overload })))
+  const weightSmooth   = smoothTrendLine(data.clinicalTrends.map((w) => ({ week: w.week, value: w.preWeight })))
+  const idwgSmooth     = smoothTrendLine(data.clinicalTrends.map((w) => ({ week: w.week, value: w.idwg })))
+  const systolicSmooth = smoothTrendLine(data.clinicalTrends.map((w) => ({ week: w.week, value: w.systolic })))
+
+  const promChartData = data.promTrends.map((w) => ({
+    name: `W${w.week}`,
+    fluid: w.fluidStatus, thirst: w.thirst, overload: w.overload,
+    fluidL:    fluidSmooth.has(w.week)  ? fluidSmooth.get(w.week)  : null,
+    thirstL:   thirstSmooth.has(w.week) ? thirstSmooth.get(w.week) : null,
+    overloadL: overSmooth.has(w.week)   ? overSmooth.get(w.week)   : null,
+    n: w.n,
+  }))
+
+  const clinChartData = data.clinicalTrends.map((w) => ({
+    name: `W${w.week}`,
+    weight: w.preWeight, idwg: w.idwg, systolic: w.systolic,
+    weightL:    weightSmooth.has(w.week)   ? weightSmooth.get(w.week)   : null,
+    idwgL:      idwgSmooth.has(w.week)     ? idwgSmooth.get(w.week)     : null,
+    systolicL:  systolicSmooth.has(w.week) ? systolicSmooth.get(w.week) : null,
+    n: w.n,
+  }))
+
+  const pL = lang === 'de'
+    ? { fluid: 'Wohlbefinden', thirst: 'Durst', overload: 'Überwässerung' }
+    : { fluid: 'Wellbeing', thirst: 'Thirst', overload: 'Overload' }
+
+  const cL = lang === 'de'
+    ? { weight: 'Gewicht vor Dialyse (kg)', idwg: 'IDWG (kg)', systolic: 'Systolisch (mmHg)' }
+    : { weight: 'Pre-dialysis weight (kg)', idwg: 'IDWG (kg)', systolic: 'Systolic BP (mmHg)' }
+
+  const hasPromData = data.promTrends.some((w) => w.n > 0)
+  const hasClinData = data.clinicalTrends.some((w) => w.n > 0)
+
+  const legendFmt = (labels: Record<string, string>) => (value: string) => {
+    if (value.endsWith('L')) return ''
+    return labels[value] ?? value
+  }
+  const tooltipFmt = (labels: Record<string, string>, unit = '') => (value: number | string, name: string) => {
+    if (name.endsWith('L')) return [null, null]
+    const label = labels[name] ?? name
+    return [typeof value === 'number' ? `${value.toFixed(2)}${unit}` : value, label]
+  }
+  const labelFmt = (label: string, payload: any[]) => {
+    const n = payload?.[0]?.payload?.n
+    return `${label}${n ? ` (n=${n})` : ''}`
+  }
+
+  return (
+    <div className="space-y-6">
+      <p className="text-xs text-slate-400">
+        {lang === 'de' ? 'Punkte = Wochenmittel · Kurve = LOESS-Glättung' : 'Dots = weekly mean · Curve = LOESS smoothing'}
+      </p>
+
+      {/* PROM trends */}
+      <div className="bg-white rounded-xl p-4 shadow-sm">
+        <h3 className="font-semibold text-slate-700 mb-4">
+          {lang === 'de' ? 'PROM-Verlauf (Studienwochenmittel)' : 'PROM Trends (weekly means)'}
+        </h3>
+        {!hasPromData ? (
+          <p className="text-slate-400 text-sm py-8 text-center">{lang === 'de' ? 'Keine PROM-Daten vorhanden' : 'No PROM data available'}</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={promChartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis domain={[1, 5]} ticks={[1,2,3,4,5]} tick={{ fontSize: 11 }} />
+              <Tooltip formatter={tooltipFmt(pL)} labelFormatter={labelFmt} />
+              <Legend formatter={legendFmt(pL)} iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="fluid"     stroke="#3b82f6" strokeWidth={0} dot={{ r: 4, fill: '#3b82f6' }} legendType="circle" name="fluid"    connectNulls />
+              <Line type="monotone" dataKey="thirst"    stroke="#f59e0b" strokeWidth={0} dot={{ r: 4, fill: '#f59e0b' }} legendType="circle" name="thirst"   connectNulls />
+              <Line type="monotone" dataKey="overload"  stroke="#ef4444" strokeWidth={0} dot={{ r: 4, fill: '#ef4444' }} legendType="circle" name="overload" connectNulls />
+              <Line type="monotone" dataKey="fluidL"    stroke="#3b82f6" strokeWidth={2.5} dot={false} legendType="none" name="fluidL"    connectNulls />
+              <Line type="monotone" dataKey="thirstL"   stroke="#f59e0b" strokeWidth={2.5} dot={false} legendType="none" name="thirstL"   connectNulls />
+              <Line type="monotone" dataKey="overloadL" stroke="#ef4444" strokeWidth={2.5} dot={false} legendType="none" name="overloadL" connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Clinical trends: weight + IDWG */}
+      <div className="bg-white rounded-xl p-4 shadow-sm">
+        <h3 className="font-semibold text-slate-700 mb-4">
+          {lang === 'de' ? 'Klinischer Verlauf — Gewicht & IDWG' : 'Clinical Trends — Weight & IDWG'}
+        </h3>
+        {!hasClinData ? (
+          <p className="text-slate-400 text-sm py-8 text-center">{lang === 'de' ? 'Keine klinischen Daten vorhanden' : 'No clinical data available'}</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={210}>
+            <LineChart data={clinChartData} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip formatter={tooltipFmt({ weight: cL.weight, idwg: cL.idwg })} labelFormatter={labelFmt} />
+              <Legend formatter={legendFmt({ weight: cL.weight, idwg: cL.idwg })} iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="weight"  stroke="#3b82f6" strokeWidth={0} dot={{ r: 4, fill: '#3b82f6' }} legendType="circle" name="weight" connectNulls />
+              <Line type="monotone" dataKey="idwg"    stroke="#10b981" strokeWidth={0} dot={{ r: 4, fill: '#10b981' }} legendType="circle" name="idwg"   connectNulls />
+              <Line type="monotone" dataKey="weightL" stroke="#3b82f6" strokeWidth={2.5} dot={false} legendType="none" name="weightL" connectNulls />
+              <Line type="monotone" dataKey="idwgL"   stroke="#10b981" strokeWidth={2.5} dot={false} legendType="none" name="idwgL"   connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Clinical trends: systolic BP */}
+      <div className="bg-white rounded-xl p-4 shadow-sm">
+        <h3 className="font-semibold text-slate-700 mb-4">
+          {lang === 'de' ? 'Klinischer Verlauf — Blutdruck (systolisch)' : 'Clinical Trends — Blood Pressure (systolic)'}
+        </h3>
+        {!hasClinData ? null : (
+          <ResponsiveContainer width="100%" height={190}>
+            <LineChart data={clinChartData} margin={{ top: 4, right: 8, left: -4, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} unit=" mmHg" />
+              <Tooltip formatter={tooltipFmt({ systolic: cL.systolic }, ' mmHg')} labelFormatter={labelFmt} />
+              <Legend formatter={legendFmt({ systolic: cL.systolic })} iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="systolic"  stroke="#8b5cf6" strokeWidth={0} dot={{ r: 4, fill: '#8b5cf6' }} legendType="circle" name="systolic"  connectNulls />
+              <Line type="monotone" dataKey="systolicL" stroke="#8b5cf6" strokeWidth={2.5} dot={false} legendType="none" name="systolicL" connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main AdminPanel ───────────────────────────────────────────────────────────
 export default function AdminPanel({ adminName }: { adminName: string }) {
   const [tab, setTab] = useState<Tab>('dashboard')
   const [shifts, setShifts] = useState<Shift[]>([])
+  const [lang, setLang] = useState<Lang>('de')
+  const [siteFilter, setSiteFilter] = useState<string>('all')
 
   useEffect(() => {
     fetch('/api/shifts').then((r) => r.json()).then(setShifts)
   }, [])
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'dashboard', label: 'Feasibility' },
-    { id: 'patients', label: 'Patients' },
-    { id: 'providers', label: 'Providers' },
-    { id: 'config', label: 'Study Config' },
-    { id: 'import', label: 'Import Data' },
+  const tabs: { id: Tab; label: { en: string; de: string } }[] = [
+    { id: 'dashboard', label: { en: 'Feasibility',   de: 'Machbarkeit' } },
+    { id: 'patients',  label: { en: 'Patients',      de: 'Patienten' } },
+    { id: 'providers', label: { en: 'Providers',     de: 'Mitarbeiter' } },
+    { id: 'config',    label: { en: 'Study Config',  de: 'Studien-Konfig' } },
+    { id: 'import',    label: { en: 'Import Data',   de: 'Datenimport' } },
+    { id: 'usage',     label: { en: 'Usage',         de: 'Nutzung' } },
+    { id: 'verlauf',   label: { en: 'Trends',        de: 'Verlauf' } },
   ]
 
   return (
     <div className="min-h-screen bg-slate-100">
       <header className="bg-blue-900 text-white px-6 py-4 shadow flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-black">HARMONY · Admin Panel</h1>
+          <h1 className="text-xl font-black">HARMONY · {lang === 'de' ? 'Admin-Panel' : 'Admin Panel'}</h1>
           <p className="text-blue-200 text-sm">{adminName}</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 items-center flex-wrap justify-end">
+          <select
+            value={siteFilter}
+            onChange={(e) => setSiteFilter(e.target.value)}
+            className="bg-blue-800 text-blue-100 border border-blue-600 text-sm px-3 py-1.5 rounded-lg focus:outline-none"
+          >
+            <option value="all">{lang === 'de' ? 'Alle Zentren' : 'All Centers'}</option>
+            {CENTERS.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
           <a href="/provider" className="text-blue-200 hover:text-white text-sm border border-blue-600 px-3 py-1.5 rounded-lg transition">
-            Provider View
+            {lang === 'de' ? 'Pflegeansicht' : 'Provider View'}
           </a>
+          <button
+            onClick={() => setLang((l) => l === 'de' ? 'en' : 'de')}
+            className="text-blue-200 hover:text-white text-sm font-bold px-3 py-1.5 rounded-lg border border-blue-600 transition"
+          >
+            {lang === 'de' ? 'EN' : 'DE'}
+          </button>
           <button onClick={() => signOut({ callbackUrl: '/login' })}
             className="text-blue-200 hover:text-white text-sm border border-blue-600 px-3 py-1.5 rounded-lg transition">
-            Sign Out
+            {lang === 'de' ? 'Abmelden' : 'Sign Out'}
           </button>
         </div>
       </header>
 
-      {/* Tab bar */}
       <div className="bg-white border-b shadow-sm px-4">
-        <div className="flex max-w-5xl mx-auto">
+        <div className="flex max-w-5xl mx-auto overflow-x-auto">
           {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
               className={clsx(
-                'px-5 py-3.5 text-sm font-semibold border-b-2 transition',
+                'px-5 py-3.5 text-sm font-semibold border-b-2 transition whitespace-nowrap',
                 tab === t.id
                   ? 'border-blue-700 text-blue-700'
                   : 'border-transparent text-slate-500 hover:text-slate-800'
               )}
             >
-              {t.label}
+              {t.label[lang]}
             </button>
           ))}
         </div>
       </div>
 
       <main className="max-w-5xl mx-auto p-4 py-6">
-        {tab === 'dashboard' && <DashboardTab />}
-        {tab === 'patients' && <PatientsTab shifts={shifts} />}
-        {tab === 'providers' && <ProvidersTab shifts={shifts} />}
-        {tab === 'config' && <ConfigTab />}
-        {tab === 'import' && <ImportTab />}
+        {tab === 'dashboard' && <DashboardTab lang={lang} siteFilter={siteFilter} />}
+        {tab === 'patients'  && <PatientsTab shifts={shifts} lang={lang} />}
+        {tab === 'providers' && <ProvidersTab shifts={shifts} lang={lang} />}
+        {tab === 'config'    && <ConfigTab lang={lang} />}
+        {tab === 'import'    && <ImportTab lang={lang} />}
+        {tab === 'usage'     && <UsageTab lang={lang} siteFilter={siteFilter} />}
+        {tab === 'verlauf'   && <VerlaufTab lang={lang} siteFilter={siteFilter} />}
       </main>
     </div>
   )

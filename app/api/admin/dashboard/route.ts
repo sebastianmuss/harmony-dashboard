@@ -1,78 +1,110 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getCurrentStudyWeek } from '@/lib/study'
+import { addDays, startOfDay } from 'date-fns'
 
-// ── GET /api/admin/dashboard ──────────────────────────────────────────────────
-// Returns aggregated feasibility metrics for the admin dashboard
-export async function GET() {
+// ── GET /api/admin/dashboard?center= ─────────────────────────────────────────
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session || session.user.role !== 'admin') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const center = new URL(req.url).searchParams.get('center') || null
+  const patientWhere = center ? { center } : {}
+
   const config = await prisma.studyConfig.findFirst()
   const studyWeek = config ? getCurrentStudyWeek(config.studyStartDate) : null
 
-  // Recruitment
-  const totalPatients = await prisma.patient.count()
-  const activePatients = await prisma.patient.count({ where: { isActive: true } })
-  const droppedOut = await prisma.patient.count({ where: { isActive: false } })
+  // All patients for this center (including dropped-out), with dropout date
+  const allPatients = await prisma.patient.findMany({
+    where: patientWhere,
+    select: { id: true, isActive: true, droppedOutAt: true, shiftId: true },
+  })
+  const totalPatients   = allPatients.length
+  const activePatients  = allPatients.filter((p) => p.isActive).length
+  const droppedOut      = allPatients.filter((p) => !p.isActive).length
 
-  // Completion rates per study week
-  // "submitted" = unique patients who submitted at least once in that week (patient-level metric)
+  // ── Weekly completion rates ─────────────────────────────────────────────────
+  // For week N, expected = patients enrolled and not yet dropped out during that week
   const weeklyStats: { week: number; submitted: number; expected: number; rate: number }[] = []
-  for (let week = 1; week <= 12; week++) {
-    const rows = await prisma.promResponse.findMany({
-      where: { studyWeek: week },
-      select: { patientId: true },
-      distinct: ['patientId'],
-    })
-    const submitted = rows.length
-    weeklyStats.push({
-      week,
-      submitted,
-      expected: activePatients,
-      rate: activePatients > 0 ? Math.round((submitted / activePatients) * 100) : 0,
-    })
+
+  if (config) {
+    const studyStart = startOfDay(config.studyStartDate)
+
+    for (let week = 1; week <= 12; week++) {
+      const weekStart = addDays(studyStart, (week - 1) * 7)
+      const weekEnd   = addDays(studyStart, week * 7 - 1)
+
+      // Expected in this week: not dropped out before the week started
+      const expectedPatients = allPatients.filter((p) =>
+        !p.droppedOutAt || startOfDay(p.droppedOutAt) >= weekStart
+      )
+      const expected = expectedPatients.length
+      const expectedIds = new Set(expectedPatients.map((p) => p.id))
+
+      const rows = await prisma.promResponse.findMany({
+        where: {
+          studyWeek: week,
+          patientId: { in: [...expectedIds] },
+        },
+        select: { patientId: true },
+        distinct: ['patientId'],
+      })
+
+      const submitted = rows.length
+      weeklyStats.push({
+        week,
+        submitted,
+        expected,
+        rate: expected > 0 ? Math.round((submitted / expected) * 100) : 0,
+      })
+    }
   }
 
-  // Response rates by shift
+  // ── Shift stats with completion % ──────────────────────────────────────────
   const shifts = await prisma.shift.findMany({ orderBy: { sortOrder: 'asc' } })
   const shiftStats = await Promise.all(
     shifts.map(async (shift) => {
-      const shiftPatients = await prisma.patient.count({ where: { shiftId: shift.id, isActive: true } })
-      const shiftResponses = await prisma.promResponse.count({
-        where: { patient: { shiftId: shift.id } },
-      })
+      const shiftPatientIds = allPatients
+        .filter((p) => p.shiftId === shift.id)
+        .map((p) => p.id)
+
+      const shiftPatients = shiftPatientIds.length
+
+      const [totalResponses, uniqueRows] = await Promise.all([
+        prisma.promResponse.count({ where: { patientId: { in: shiftPatientIds } } }),
+        prisma.promResponse.findMany({
+          where: { patientId: { in: shiftPatientIds } },
+          select: { patientId: true },
+          distinct: ['patientId'],
+        }),
+      ])
+
+      const uniqueSubmitters = uniqueRows.length
       return {
         shiftId: shift.id,
         shiftName: shift.name,
         schedule: shift.schedule,
         patients: shiftPatients,
-        totalResponses: shiftResponses,
+        totalResponses,
+        uniqueSubmitters,
+        completionPct: shiftPatients > 0 ? Math.round((uniqueSubmitters / shiftPatients) * 100) : 0,
       }
     })
   )
 
   // Today's submissions
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = startOfDay(new Date())
   const todayCount = await prisma.promResponse.count({
-    where: { sessionDate: today },
+    where: { sessionDate: today, ...(center ? { patient: { center } } : {}) },
   })
 
-  // Overall response rate (all sessions to date)
-  const totalResponses = await prisma.promResponse.count()
-
-  // Per-week completion for active patients (expected vs actual)
-  const patientsByWeek = studyWeek
-    ? Array.from({ length: studyWeek }, (_, i) => i + 1).map((week) => {
-        const stat = weeklyStats.find((s) => s.week === week)
-        return stat ?? { week, submitted: 0, expected: activePatients, rate: 0 }
-      })
-    : []
+  const totalResponses = await prisma.promResponse.count({
+    where: center ? { patient: { center } } : {},
+  })
 
   return NextResponse.json({
     recruitment: { total: totalPatients, active: activePatients, droppedOut },
@@ -81,6 +113,5 @@ export async function GET() {
     totalResponses,
     weeklyStats,
     shiftStats,
-    completionByWeek: patientsByWeek,
   })
 }
