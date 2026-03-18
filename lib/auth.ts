@@ -5,7 +5,7 @@ import { prisma } from '@/lib/db'
 import { pinIndexHash, validatePin } from '@/lib/pin'
 
 export const authOptions: NextAuthOptions = {
-  session: { strategy: 'jwt' },
+  session: { strategy: 'jwt', maxAge: 8 * 60 * 60 }, // 8 hours — one clinical shift
   pages: {
     signIn: '/login',
     error: '/login',

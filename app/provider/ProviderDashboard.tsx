@@ -42,6 +42,7 @@ interface PatientData {
   dryWeight: number | null
   isLongGapToday: boolean
   onHDToday: boolean
+  hdOverrideActive: boolean
   submittedToday: boolean
   todayProm: PromEntry | null
   todayClinical: ClinicalEntry | null
@@ -636,15 +637,31 @@ function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, o
   const [expanded, setExpanded] = useState(false)
   const [showClinicalForm, setShowClinicalForm] = useState(false)
   const [showPromEntry, setShowPromEntry] = useState(false)
+  const [overriding, setOverriding] = useState(false)
 
   const clinicalTodayLabel = lang === 'de' ? 'Klinische Daten heute' : 'Clinical Data Today'
   const enterPromLabel = lang === 'de' ? 'PROM erfassen' : 'Enter PROM'
   const noDataLabel    = lang === 'de' ? 'Keine Daten für heute' : 'No clinical data for today'
 
+  // Dot + border color: green = submitted, yellow = on HD today, grey = not on HD
+  const borderColor = patient.submittedToday ? 'border-green-300' : patient.onHDToday ? 'border-yellow-300' : 'border-slate-200'
+  const dotColor    = patient.submittedToday ? 'bg-green-500'  : patient.onHDToday ? 'bg-yellow-400' : 'bg-slate-300'
+
+  async function markHDToday() {
+    setOverriding(true)
+    await fetch(`/api/patients/${patient.id}/override`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: today.slice(0, 10) }),
+    })
+    setOverriding(false)
+    onDataSaved()
+  }
+
   return (
-    <div className={clsx('bg-white rounded-xl border-2 shadow-sm overflow-hidden transition-all', patient.submittedToday ? 'border-green-300' : 'border-slate-200')}>
+    <div className={clsx('bg-white rounded-xl border-2 shadow-sm overflow-hidden transition-all', borderColor)}>
       <div className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => setExpanded((e) => !e)}>
-        <div className={clsx('w-3 h-3 rounded-full flex-shrink-0 mt-1.5', patient.submittedToday ? 'bg-green-500' : 'bg-slate-300')} />
+        <div className={clsx('w-3 h-3 rounded-full flex-shrink-0 mt-1.5', dotColor)} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p className="font-mono font-bold text-blue-700 truncate flex-1">{patient.patientCode}</p>
@@ -671,6 +688,7 @@ function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, o
             <span>{patient.promHistory.length} sessions</span>
             {patient.isLongGapToday && <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-semibold">Long gap</span>}
             {!patient.onHDToday && <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-semibold">{lang === 'de' ? 'Kein HD-Tag' : 'No HD today'}</span>}
+            {patient.hdOverrideActive && <span className="bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded font-semibold text-xs">{lang === 'de' ? 'Einmalig hinzugefügt' : 'Override'}</span>}
           </div>
         </div>
       </div>
@@ -713,6 +731,22 @@ function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, o
             </h4>
             <BpPanel clinicalHistory={patient.clinicalHistory} studyStartDate={studyStartDate} lang={lang} />
           </div>
+
+          {/* One-time HD override */}
+          {!patient.onHDToday && (
+            <div>
+              <button
+                onClick={markHDToday}
+                disabled={overriding}
+                className="text-xs bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1.5 rounded-lg font-semibold transition disabled:opacity-50"
+              >
+                {overriding
+                  ? (lang === 'de' ? 'Wird gespeichert…' : 'Saving…')
+                  : (lang === 'de' ? 'Heute als HD-Tag markieren' : 'Mark as HD today')}
+              </button>
+              <p className="text-xs text-slate-400 mt-1">{lang === 'de' ? 'Nur für heute — kein permanenter Wechsel des Dialyseplans' : 'One-time only — does not change the regular schedule'}</p>
+            </div>
+          )}
 
           {/* Clinical data today */}
           <div>
@@ -773,7 +807,7 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
   const [data, setData] = useState<ShiftData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'all' | 'submitted' | 'pending'>('all')
+  const [filter, setFilter] = useState<'all' | 'submitted' | 'pending_hd'>('all')
   const [lang, setLang] = useState<Lang>('de')
   const [view, setView] = useState<'patients' | 'verlauf'>('patients')
 
@@ -793,7 +827,7 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
 
   const filteredPatients = data?.patients.filter((p) => {
     if (filter === 'submitted') return p.submittedToday
-    if (filter === 'pending') return !p.submittedToday
+    if (filter === 'pending_hd') return p.onHDToday && !p.submittedToday
     return true
   }) ?? []
 
@@ -804,8 +838,9 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
     patients: filteredPatients.filter((p) => p.center === center),
   }))
 
-  const submittedCount = data?.patients.filter((p) => p.submittedToday).length ?? 0
-  const totalCount = data?.patients.length ?? 0
+  const submittedCount  = data?.patients.filter((p) => p.submittedToday).length ?? 0
+  const pendingHDCount  = data?.patients.filter((p) => p.onHDToday && !p.submittedToday).length ?? 0
+  const totalCount      = data?.patients.length ?? 0
   const tpLabel = data?.currentTimepoint ? (TIMEPOINT_LABELS[data.currentTimepoint]?.[lang] ?? data.currentTimepoint) : '—'
 
   return (
@@ -880,19 +915,23 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
                   {lang === 'de' ? 'Verlauf' : 'Trends'}
                 </button>
               </div>
-              {view === 'patients' && (['all', 'pending', 'submitted'] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={clsx('px-4 py-2 rounded-lg text-sm font-semibold transition', filter === f ? 'bg-blue-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200')}
-                >
-                  {f === 'all'
-                    ? `${lang === 'de' ? 'Alle' : 'All'} (${totalCount})`
-                    : f === 'pending'
-                    ? `${lang === 'de' ? 'Ausstehend' : 'Pending'} (${totalCount - submittedCount})`
-                    : `${lang === 'de' ? 'Eingegeben' : 'Submitted'} (${submittedCount})`}
-                </button>
-              ))}
+              {view === 'patients' && (
+                <>
+                  {(['all', 'pending_hd', 'submitted'] as const).map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setFilter(f)}
+                      className={clsx('px-4 py-2 rounded-lg text-sm font-semibold transition', filter === f ? 'bg-blue-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200')}
+                    >
+                      {f === 'all'
+                        ? `${lang === 'de' ? 'Alle' : 'All'} (${totalCount})`
+                        : f === 'pending_hd'
+                        ? `${lang === 'de' ? 'Heute ausstehend' : 'Pending today'} (${pendingHDCount})`
+                        : `${lang === 'de' ? 'Eingegeben' : 'Submitted'} (${submittedCount})`}
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
 
             {view === 'verlauf' && <ProviderVerlaufView lang={lang} />}
@@ -900,8 +939,10 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
             <div className={clsx('space-y-4', view !== 'patients' && 'hidden')}>
               {filteredPatients.length === 0 && (
                 <div className="bg-white rounded-xl p-8 text-center text-slate-400">
-                  {filter === 'pending'
-                    ? (lang === 'de' ? 'Alle Patienten haben heute eingegeben!' : 'All patients have submitted today!')
+                  {filter === 'pending_hd'
+                    ? (lang === 'de' ? 'Alle heutigen HD-Patienten haben eingegeben!' : 'All HD patients for today have submitted!')
+                    : filter === 'submitted'
+                    ? (lang === 'de' ? 'Noch keine Eingaben heute.' : 'No submissions yet today.')
                     : (lang === 'de' ? 'Keine Patienten gefunden.' : 'No patients found.')}
                 </div>
               )}

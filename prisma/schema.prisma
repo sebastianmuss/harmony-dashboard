@@ -43,6 +43,7 @@ model Patient {
   shift          Shift     @relation(fields: [shiftId], references: [id])
   promResponses  PromResponse[]
   clinicalData   ClinicalData[]
+  dailyOverrides DailyScheduleOverride[]
 
   @@map("patients")
 }
@@ -104,6 +105,20 @@ model ClinicalData {
   @@unique([patientId, sessionDate])
   @@index([sessionDate])
   @@map("clinical_data")
+}
+
+// ─── Daily Schedule Override ──────────────────────────────────────────────────
+// One-time "treat this patient as on HD today" override set by a provider
+model DailyScheduleOverride {
+  id        Int      @id @default(autoincrement())
+  patientId Int
+  date      DateTime @db.Date
+  patient   Patient  @relation(fields: [patientId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([patientId, date])
+  @@index([date])
+  @@map("daily_schedule_overrides")
 }
 
 // ─── Activity Log ─────────────────────────────────────────────────────────────

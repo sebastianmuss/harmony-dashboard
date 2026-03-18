@@ -74,6 +74,9 @@ export async function GET() {
       isActive: p.isActive,
       loginCount: logins.length,
       viewCount: views.length,
+      promCount: allTimeLogs.filter(
+        (l) => l.eventType === 'prom_submit' && (l.actorType === 'provider' || l.actorType === 'admin') && l.actorId === p.id
+      ).length,
       lastLogin: logins.length ? logins[logins.length - 1].createdAt.toISOString() : null,
       lastView: views.length ? views[views.length - 1].createdAt.toISOString() : null,
     }
@@ -105,10 +108,10 @@ export async function GET() {
   // ── Daily activity (last 30 days) ─────────────────────────────────────────
   const dailyMap: Record<string, { logins: number; proms: number; views: number }> = {}
   for (let i = 29; i >= 0; i--) {
-    dailyMap[format(subDays(new Date(), i), 'yyyy-MM-dd')] = { logins: 0, proms: 0, views: 0 }
+    dailyMap[subDays(new Date(), i).toISOString().slice(0, 10)] = { logins: 0, proms: 0, views: 0 }
   }
   for (const log of allLogs) {
-    const day = format(log.createdAt, 'yyyy-MM-dd')
+    const day = log.createdAt.toISOString().slice(0, 10)
     if (!dailyMap[day]) continue
     if (log.eventType === 'login') dailyMap[day].logins++
     else if (log.eventType === 'prom_submit') dailyMap[day].proms++

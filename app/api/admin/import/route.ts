@@ -21,9 +21,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const contentLength = req.headers.get('content-length')
+  if (contentLength && parseInt(contentLength) > 5 * 1024 * 1024) {
+    return NextResponse.json({ error: 'File too large (max 5 MB)' }, { status: 413 })
+  }
+
   const formData = await req.formData()
   const file = formData.get('file') as File | null
   if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+  if (file.size > 5 * 1024 * 1024) {
+    return NextResponse.json({ error: 'File too large (max 5 MB)' }, { status: 413 })
+  }
 
   const text = await file.text()
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0)

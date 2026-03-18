@@ -47,6 +47,13 @@ export async function GET() {
     }
   }
 
+  // Load today's overrides
+  const todayOverrides = await prisma.dailyScheduleOverride.findMany({
+    where: { date: today },
+    select: { patientId: true },
+  })
+  const overridePatientIds = new Set(todayOverrides.map((o) => o.patientId))
+
   const patients = await prisma.patient.findMany({
     where: patientWhere,
     include: {
@@ -88,7 +95,9 @@ export async function GET() {
     )
 
     const isLongGap = isLongGapSession(today, patient.dialysisSchedule, patient.customDialysisDays)
-    const onHDToday = isDialysisDay(today, patient.dialysisSchedule, patient.customDialysisDays)
+    const scheduledHD = isDialysisDay(today, patient.dialysisSchedule, patient.customDialysisDays)
+    const hasOverride = overridePatientIds.has(patient.id)
+    const onHDToday = scheduledHD || hasOverride
 
     return {
       id: patient.id,
@@ -101,6 +110,7 @@ export async function GET() {
       dryWeight: patient.dryWeight ? Number(patient.dryWeight) : null,
       isLongGapToday: isLongGap,
       onHDToday,
+      hdOverrideActive: hasOverride,
       submittedToday: !!todayProm,
       todayProm: todayProm ?? null,
       todayClinical: todayClinical ?? null,

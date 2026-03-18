@@ -940,7 +940,7 @@ function ImportTab({ lang }: { lang: Lang }) {
 
 // ── Usage / Activity Tab ──────────────────────────────────────────────────────
 interface PatientActivity { patientId: number; patientCode: string; center: string; isActive: boolean; loginCount: number; promCount: number; lastLogin: string | null; lastProm: string | null }
-interface ProviderActivity { providerId: number; name: string; center: string | null; role: string; isActive: boolean; loginCount: number; viewCount: number; lastLogin: string | null; lastView: string | null }
+interface ProviderActivity { providerId: number; name: string; center: string | null; role: string; isActive: boolean; loginCount: number; viewCount: number; promCount: number; lastLogin: string | null; lastView: string | null }
 interface CenterActivity { center: string; patientLogins: number; providerLogins: number; promSubmits: number; dataViews: number }
 interface DailyActivity { date: string; logins: number; proms: number; views: number }
 interface ActivityData { patientActivity: PatientActivity[]; providerActivity: ProviderActivity[]; centerActivity: CenterActivity[]; dailyActivity: DailyActivity[] }
@@ -994,6 +994,22 @@ function UsageTab({ lang, siteFilter }: { lang: Lang; siteFilter: string }) {
           value={data.providerActivity.reduce((s, p) => s + p.viewCount, 0)}
           color="amber"
         />
+      </div>
+
+      {/* Export buttons */}
+      <div className="flex flex-wrap gap-2">
+        <span className="text-xs text-slate-500 self-center font-semibold uppercase tracking-wide">{lang === 'de' ? 'Export:' : 'Export:'}</span>
+        {[
+          { label: lang === 'de' ? 'PROM-Daten (CSV)' : 'PROM Data (CSV)', href: '/api/admin/export?type=prom' },
+          { label: lang === 'de' ? 'Klinische Daten (CSV)' : 'Clinical Data (CSV)', href: '/api/admin/export?type=clinical' },
+          { label: lang === 'de' ? 'Nutzung Patienten (CSV)' : 'Usage Patients (CSV)', href: '/api/admin/export-usage?type=patients' },
+          { label: lang === 'de' ? 'Nutzung Personal (CSV)' : 'Usage Providers (CSV)', href: '/api/admin/export-usage?type=providers' },
+        ].map(({ label, href }) => (
+          <a key={href} href={href} download
+            className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg font-semibold transition border border-slate-200">
+            ↓ {label}
+          </a>
+        ))}
       </div>
 
       {/* Daily activity chart (last 30d) */}
@@ -1065,6 +1081,7 @@ function UsageTab({ lang, siteFilter }: { lang: Lang; siteFilter: string }) {
                 <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Zentrum' : 'Center'}</th>
                 <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Logins' : 'Logins'}</th>
                 <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Ansichten' : 'Views'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'PROMs erfasst' : 'PROMs entered'}</th>
                 <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Letzter Login' : 'Last Login'}</th>
                 <th className="py-2 font-semibold">{lang === 'de' ? 'Letzte Ansicht' : 'Last View'}</th>
               </tr>
@@ -1081,6 +1098,7 @@ function UsageTab({ lang, siteFilter }: { lang: Lang; siteFilter: string }) {
                   <td className="py-2 pr-4 text-slate-500">{p.center ?? '—'}</td>
                   <td className="py-2 pr-4 font-semibold">{p.loginCount}</td>
                   <td className="py-2 pr-4 font-semibold">{p.viewCount}</td>
+                  <td className="py-2 pr-4 font-semibold">{p.promCount ?? 0}</td>
                   <td className="py-2 pr-4 text-slate-500 text-xs">{fmt(p.lastLogin)}</td>
                   <td className="py-2 text-slate-500 text-xs">{fmt(p.lastView)}</td>
                 </tr>
