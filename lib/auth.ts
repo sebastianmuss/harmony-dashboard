@@ -8,6 +8,7 @@ import logger from '@/lib/logger'
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
+  trustHost: true, // required when behind a reverse proxy (Caddy, nginx, etc.)
   // JWT is required for CredentialsProvider (Auth.js constraint).
   // Session revocation is implemented via kickedAt: the jwt callback
   // checks the DB on every request and invalidates the token if the user
