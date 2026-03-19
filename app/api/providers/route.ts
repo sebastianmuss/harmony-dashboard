@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
+import { writeAudit, getIp } from '@/lib/audit'
 
 // ── GET /api/providers ────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -54,5 +55,16 @@ export async function POST(req: NextRequest) {
   })
 
   const { passwordHash: _h, ...safeProvider } = provider
+
+  writeAudit({
+    actorType: session.user.role,
+    actorId: session.user.providerId ?? null,
+    action: 'create',
+    resource: 'provider',
+    resourceId: provider.id,
+    changes: { name: provider.name, username: provider.username, role: provider.role, center: provider.center },
+    ip: getIp(req),
+  })
+
   return NextResponse.json(safeProvider, { status: 201 })
 }

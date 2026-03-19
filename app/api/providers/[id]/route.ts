@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
+import { writeAudit, getIp } from '@/lib/audit'
 
 // ── PATCH /api/providers/[id] ─────────────────────────────────────────────────
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -36,5 +37,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   })
 
   const { passwordHash: _h, ...safeProvider } = provider
+
+  const loggedChanges = Object.fromEntries(
+    Object.entries(update).filter(([k]) => k !== 'passwordHash')
+  )
+  writeAudit({
+    actorType: session.user.role,
+    actorId: session.user.providerId ?? null,
+    action: 'update',
+    resource: 'provider',
+    resourceId: providerId,
+    changes: loggedChanges,
+    ip: getIp(req),
+  })
+
   return NextResponse.json(safeProvider)
 }

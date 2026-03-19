@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { writeAudit, getIp } from '@/lib/audit'
+import { z } from 'zod'
+import logger from '@/lib/logger'
+
+const ClinicalDataSchema = z.object({
+  patientId:               z.int().positive(),
+  sessionDate:             z.string().date(),
+  preDialysisWeight:       z.number().min(20).max(300).nullable().optional(),
+  interdialyticWeightGain: z.number().min(0).max(15).nullable().optional(),
+  systolicBp:              z.int().min(50).max(300).nullable().optional(),
+  diastolicBp:             z.int().min(20).max(200).nullable().optional(),
+})
 
 // ── GET /api/clinical?patientId=&from=&to= ────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -45,12 +57,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const body = await req.json()
-  const { patientId, sessionDate, preDialysisWeight, interdialyticWeightGain, systolicBp, diastolicBp } = body
-
-  if (!patientId || !sessionDate) {
-    return NextResponse.json({ error: 'patientId and sessionDate are required' }, { status: 400 })
+  const raw = await req.json()
+  const parsed = ClinicalDataSchema.safeParse(raw)
+  if (!parsed.success) {
+    logger.warn({ path: '/api/clinical', errors: parsed.error.flatten() }, 'Clinical data validation failed')
+    return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 })
   }
+  const { patientId, sessionDate, preDialysisWeight, interdialyticWeightGain, systolicBp, diastolicBp } = parsed.data
 
   const date = new Date(sessionDate)
   date.setHours(0, 0, 0, 0)
@@ -73,5 +86,22 @@ export async function POST(req: NextRequest) {
       diastolicBp: diastolicBp ?? null,
     },
   })
+  writeAudit({
+    actorType: session.user.role,
+    actorId: session.user.providerId ?? null,
+    action: 'create',
+    resource: 'clinical',
+    resourceId: record.id,
+    changes: {
+      patientId,
+      date: date.toISOString().slice(0, 10),
+      preDialysisWeight: preDialysisWeight ?? null,
+      interdialyticWeightGain: interdialyticWeightGain ?? null,
+      systolicBp: systolicBp ?? null,
+      diastolicBp: diastolicBp ?? null,
+    },
+    ip: getIp(req),
+  })
+
   return NextResponse.json(record, { status: 201 })
 }

@@ -3,6 +3,17 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getCurrentStudyWeek, getTimepointForWeek } from '@/lib/study'
+import { writeAudit, getIp } from '@/lib/audit'
+import { z } from 'zod'
+import logger from '@/lib/logger'
+
+const PromSubmitSchema = z.object({
+  fluidStatusScore:    z.int().min(1).max(5),
+  thirstScore:         z.int().min(1).max(5),
+  fluidOverloadScore:  z.int().min(1).max(5),
+  patientId:   z.int().positive().optional(),
+  sessionDate: z.string().date().optional(),
+})
 
 // ── GET /api/prom?patientId=&from=&to= ────────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -46,15 +57,14 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json()
-  const { fluidStatusScore, thirstScore, fluidOverloadScore } = body
-
-  // Validate scores
-  for (const score of [fluidStatusScore, thirstScore, fluidOverloadScore]) {
-    if (!Number.isInteger(score) || score < 1 || score > 5) {
-      return NextResponse.json({ error: 'Scores must be integers between 1 and 5' }, { status: 400 })
-    }
+  const raw = await req.json()
+  const parsed = PromSubmitSchema.safeParse(raw)
+  if (!parsed.success) {
+    logger.warn({ path: '/api/prom', errors: parsed.error.flatten() }, 'PROM validation failed')
+    return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 })
   }
+  const { fluidStatusScore, thirstScore, fluidOverloadScore } = parsed.data
+  const body = parsed.data
 
   // Resolve the target patient
   let patientId: number
@@ -63,7 +73,7 @@ export async function POST(req: NextRequest) {
     patientId = session.user.patientId
   } else if (['provider', 'admin'].includes(session.user.role)) {
     if (!body.patientId) return NextResponse.json({ error: 'patientId required' }, { status: 400 })
-    patientId = parseInt(body.patientId)
+    patientId = body.patientId
   } else {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -99,6 +109,16 @@ export async function POST(req: NextRequest) {
       thirstScore,
       fluidOverloadScore,
     },
+  })
+
+  writeAudit({
+    actorType: session.user.role,
+    actorId: session.user.patientId ?? session.user.providerId ?? null,
+    action: 'create',
+    resource: 'prom',
+    resourceId: response.id,
+    changes: { patientId, sessionDate: sessionDate.toISOString().slice(0, 10), fluidStatusScore, thirstScore, fluidOverloadScore },
+    ip: getIp(req),
   })
 
   // Fire-and-forget activity log

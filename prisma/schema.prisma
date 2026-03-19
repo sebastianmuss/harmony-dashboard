@@ -7,6 +7,77 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── NextAuth Tables ──────────────────────────────────────────────────────────
+// Required by @next-auth/prisma-adapter for database-backed sessions
+
+// Model names must match what @next-auth/prisma-adapter expects.
+// @@map directives keep our own table naming convention.
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+
+  // HARMONY role data — populated on first login, refreshed on each login
+  role                String  @default("patient")
+  patientId           Int?    @unique
+  providerId          Int?    @unique
+  patientCode         String?
+  center              String?
+  shiftId             Int?
+  shiftName           String?
+  shiftSchedule       String?
+  dialysisSchedule    String?
+  customDialysisDays  String?
+
+  accounts Account[]
+  sessions Session[]
+
+  @@map("auth_users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("auth_accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("auth_sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("auth_verification_tokens")
+}
+
 // ─── Shifts ──────────────────────────────────────────────────────────────────
 // 5 fixed shifts at the Austrian dialysis centre
 model Shift {
@@ -136,6 +207,25 @@ model ActivityLog {
   @@index([actorId, actorType])
   @@index([createdAt])
   @@map("activity_logs")
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+// Append-only record of all data-modifying actions (DSGVO accountability)
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  timestamp  DateTime @default(now())
+  actorType  String   // 'admin' | 'provider' | 'patient' | 'system'
+  actorId    Int?     // providerId or patientId
+  action     String   // 'create' | 'update' | 'delete'
+  resource   String   // 'patient' | 'provider' | 'prom' | 'clinical' | 'config'
+  resourceId Int?
+  changes    Json?    // { field: { before, after } } — never includes PINs/passwords
+  ip         String?
+
+  @@index([resource, resourceId])
+  @@index([actorId])
+  @@index([timestamp])
+  @@map("audit_logs")
 }
 
 // ─── Study Configuration ──────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { pinIndexHash, validatePin } from '@/lib/pin'
+import { writeAudit, getIp } from '@/lib/audit'
 
 // ── PATCH /api/patients/[id] ──────────────────────────────────────────────────
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -42,6 +43,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   })
 
   const { pin: _pin, pinIndexHash: _idx, ...safePatient } = patient
+
+  // Log changed fields (exclude PIN — already redacted from update object)
+  const loggedChanges = Object.fromEntries(
+    Object.entries(update).filter(([k]) => k !== 'pin' && k !== 'pinIndexHash')
+  )
+  writeAudit({
+    actorType: session.user.role,
+    actorId: session.user.providerId ?? null,
+    action: 'update',
+    resource: 'patient',
+    resourceId: patientId,
+    changes: loggedChanges,
+    ip: getIp(req),
+  })
+
   return NextResponse.json(safePatient)
 }
 
@@ -58,6 +74,15 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   await prisma.patient.update({
     where: { id: patientId },
     data: { isActive: false, droppedOutAt: new Date() },
+  })
+
+  writeAudit({
+    actorType: session.user.role,
+    actorId: session.user.providerId ?? null,
+    action: 'delete',
+    resource: 'patient',
+    resourceId: patientId,
+    ip: getIp(req),
   })
 
   return NextResponse.json({ success: true })

@@ -4,6 +4,20 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { pinIndexHash, validatePin } from '@/lib/pin'
+import { writeAudit, getIp } from '@/lib/audit'
+import { z } from 'zod'
+import logger from '@/lib/logger'
+
+const CreatePatientSchema = z.object({
+  patientCode:        z.string().min(1).max(20).toUpperCase(),
+  pin:                z.string().regex(/^\d{4,6}$/, 'PIN must be 4–6 digits'),
+  shiftId:            z.int().positive(),
+  enrollmentDate:     z.string().date(),
+  center:             z.string().min(1).optional(),
+  dialysisSchedule:   z.enum(['MWF', 'TThS', 'custom']).optional(),
+  customDialysisDays: z.string().optional().nullable(),
+  notes:              z.string().optional().nullable(),
+})
 
 // ── GET /api/patients?shiftId= ────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -44,16 +58,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const body = await req.json()
-  const { patientCode, pin, shiftId, enrollmentDate, center, dialysisSchedule, customDialysisDays, notes } = body
-
-  if (!patientCode || !pin || !shiftId || !enrollmentDate) {
-    return NextResponse.json({ error: 'patientCode, pin, shiftId, and enrollmentDate are required' }, { status: 400 })
+  const raw = await req.json()
+  const parsed = CreatePatientSchema.safeParse(raw)
+  if (!parsed.success) {
+    logger.warn({ path: '/api/patients', errors: parsed.error.flatten() }, 'Patient create validation failed')
+    return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 })
   }
-
-  if (!validatePin(pin)) {
-    return NextResponse.json({ error: 'PIN must be exactly 6 digits' }, { status: 400 })
-  }
+  const { patientCode, pin, shiftId, enrollmentDate, center, dialysisSchedule, customDialysisDays, notes } = parsed.data
 
   const [pinHash, indexHash] = await Promise.all([
     bcrypt.hash(pin, 12),
@@ -62,7 +73,7 @@ export async function POST(req: NextRequest) {
 
   const patient = await prisma.patient.create({
     data: {
-      patientCode: patientCode.toUpperCase(),
+      patientCode,
       pin: pinHash,
       pinIndexHash: indexHash,
       shiftId,
@@ -76,5 +87,16 @@ export async function POST(req: NextRequest) {
   })
 
   const { pin: _pin, pinIndexHash: _idx, ...safePatient } = patient
+
+  writeAudit({
+    actorType: session.user.role,
+    actorId: session.user.providerId ?? null,
+    action: 'create',
+    resource: 'patient',
+    resourceId: patient.id,
+    changes: { patientCode: patient.patientCode, center: patient.center, shiftId: patient.shiftId },
+    ip: getIp(req),
+  })
+
   return NextResponse.json(safePatient, { status: 201 })
 }

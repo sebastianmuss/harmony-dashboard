@@ -184,7 +184,7 @@ async function main() {
       const patientCode = nextCode()
       const rawPin = uniquePin()
       const [pinHash, indexHash] = await Promise.all([
-        bcrypt.hash(rawPin, 10),
+        bcrypt.hash(rawPin, 12),
         Promise.resolve(pinIndexHash(rawPin)),
       ])
 
