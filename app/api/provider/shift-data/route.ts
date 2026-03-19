@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getCurrentStudyWeek, getTimepointForWeek, isLongGapSession, isDialysisDay } from '@/lib/study'
 
 // ── GET /api/provider/shift-data ──────────────────────────────────────────────
 // Returns today's shift patient list with PROM history + clinical data
 export async function GET() {
-  const session = await getServerSession(authOptions)
+  const session = await auth()
   if (!session || !['provider', 'admin'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getCurrentStudyWeek, getTimepointForWeek } from '@/lib/study'
 import { writeAudit, getIp } from '@/lib/audit'
@@ -17,7 +16,7 @@ const PromSubmitSchema = z.object({
 
 // ── GET /api/prom?patientId=&from=&to= ────────────────────────────────────────
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions)
+  const session = await auth()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
@@ -54,7 +53,7 @@ export async function GET(req: NextRequest) {
 // Patients submit their own. Providers can submit on behalf of a patient
 // by passing patientId + optionally sessionDate in the body.
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
+  const session = await auth()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const raw = await req.json()
@@ -137,7 +136,7 @@ export async function POST(req: NextRequest) {
 
 // ── DELETE /api/prom?id= — providers/admins can delete a response ─────────────
 export async function DELETE(req: NextRequest) {
-  const session = await getServerSession(authOptions)
+  const session = await auth()
   if (!session || !['provider', 'admin'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

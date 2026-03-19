@@ -1,10 +1,9 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import ProviderDashboard from './ProviderDashboard'
 
 export default async function ProviderPage() {
-  const session = await getServerSession(authOptions)
+  const session = await auth()
   if (!session || !['provider', 'admin'].includes(session.user.role)) redirect('/login')
 
   return (

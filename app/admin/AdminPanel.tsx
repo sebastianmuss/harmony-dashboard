@@ -73,7 +73,7 @@ interface DashboardData {
   shiftStats: { shiftId: number; shiftName: string; schedule: string; patients: number; totalResponses: number; uniqueSubmitters: number; completionPct: number }[]
 }
 
-type Tab = 'dashboard' | 'patients' | 'providers' | 'config' | 'import' | 'usage' | 'verlauf'
+type Tab = 'dashboard' | 'patients' | 'providers' | 'config' | 'import' | 'usage' | 'verlauf' | 'sessions'
 
 // ── Small components ──────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, color = 'blue' }: { label: string; value: string | number; sub?: string; color?: string }) {
@@ -1348,8 +1348,135 @@ function VerlaufTab({ lang, siteFilter }: { lang: Lang; siteFilter: string }) {
   )
 }
 
+// ── Sessions Tab ──────────────────────────────────────────────────────────────
+interface ActiveSession {
+  userId: string
+  name: string | null
+  role: string
+  center: string | null
+  patientCode: string | null
+  loginAt: string
+  kickedAt: string | null
+}
+
+function SessionsTab({ lang, adminUserId }: { lang: Lang; adminUserId: string }) {
+  const [sessions, setSessions] = useState<ActiveSession[]>([])
+  const [loading, setLoading] = useState(true)
+  const [kicking, setKicking] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const res = await fetch('/api/admin/sessions')
+    if (res.ok) setSessions(await res.json())
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  async function kick(userId: string) {
+    setKicking(userId)
+    await fetch('/api/admin/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    })
+    await load()
+    setKicking(null)
+  }
+
+  async function kickAllPatients() {
+    const patients = sessions.filter((s) => s.role === 'patient' && s.userId !== adminUserId && !s.kickedAt)
+    for (const s of patients) {
+      await fetch('/api/admin/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: s.userId }),
+      })
+    }
+    await load()
+  }
+
+  if (loading) return <div className="text-center py-12 text-slate-400">{lang === 'de' ? 'Lade Sitzungen…' : 'Loading sessions…'}</div>
+
+  const patientCount = sessions.filter((s) => s.role === 'patient' && !s.kickedAt).length
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-base font-bold text-slate-700">
+            {lang === 'de' ? `Aktive Sitzungen (${sessions.length})` : `Active Sessions (${sessions.length})`}
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {lang === 'de' ? 'Logins der letzten 8 Stunden' : 'Logins in the past 8 hours'}
+          </p>
+        </div>
+        {patientCount > 0 && (
+          <button
+            onClick={kickAllPatients}
+            className="text-xs font-semibold bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg transition"
+          >
+            {lang === 'de' ? `Alle Patienten abmelden (${patientCount})` : `Kick all patients (${patientCount})`}
+          </button>
+        )}
+      </div>
+
+      {sessions.length === 0 ? (
+        <p className="text-slate-400 text-sm py-6 text-center">{lang === 'de' ? 'Keine aktiven Sitzungen.' : 'No active sessions.'}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-slate-500 border-b">
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Benutzer' : 'User'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Rolle' : 'Role'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Zentrum' : 'Center'}</th>
+                <th className="py-2 pr-4 font-semibold">{lang === 'de' ? 'Login' : 'Login'}</th>
+                <th className="py-2 font-semibold"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sessions.map((s) => {
+                const isSelf = s.userId === adminUserId
+                const isKicked = !!s.kickedAt
+                return (
+                  <tr key={s.userId} className={clsx('border-b border-slate-50', isSelf ? 'bg-blue-50' : isKicked ? 'bg-slate-50 opacity-60' : 'hover:bg-slate-50')}>
+                    <td className="py-2 pr-4 font-medium">
+                      {s.patientCode ?? s.name ?? s.userId}
+                      {isSelf && <span className="ml-1.5 text-xs text-blue-500 font-semibold">{lang === 'de' ? '(Sie)' : '(you)'}</span>}
+                      {isKicked && <span className="ml-1.5 text-xs text-orange-500 font-semibold">{lang === 'de' ? 'abgemeldet' : 'kicked'}</span>}
+                    </td>
+                    <td className="py-2 pr-4 capitalize text-slate-500">{s.role}</td>
+                    <td className="py-2 pr-4 text-slate-500">{s.center ?? '—'}</td>
+                    <td className="py-2 pr-4 text-slate-400 text-xs">{new Date(s.loginAt).toLocaleTimeString()}</td>
+                    <td className="py-2">
+                      {isSelf ? (
+                        <span className="text-xs text-slate-400">{lang === 'de' ? 'Eigene Sitzung' : 'Own session'}</span>
+                      ) : isKicked ? (
+                        <span className="text-xs text-slate-400">{lang === 'de' ? 'Abgemeldet' : 'Revoked'}</span>
+                      ) : (
+                        <button
+                          onClick={() => kick(s.userId)}
+                          disabled={kicking === s.userId}
+                          className="text-xs font-semibold bg-red-100 hover:bg-red-200 text-red-700 px-2.5 py-1 rounded-lg transition disabled:opacity-50"
+                        >
+                          {kicking === s.userId ? '…' : (lang === 'de' ? 'Abmelden' : 'Kick')}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main AdminPanel ───────────────────────────────────────────────────────────
-export default function AdminPanel({ adminName }: { adminName: string }) {
+export default function AdminPanel({ adminName, adminUserId }: { adminName: string; adminUserId: string }) {
   const [tab, setTab] = useState<Tab>('dashboard')
   const [shifts, setShifts] = useState<Shift[]>([])
   const [lang, setLang] = useState<Lang>('de')
@@ -1367,6 +1494,7 @@ export default function AdminPanel({ adminName }: { adminName: string }) {
     { id: 'import',    label: { en: 'Import Data',   de: 'Datenimport' } },
     { id: 'usage',     label: { en: 'Usage',         de: 'Nutzung' } },
     { id: 'verlauf',   label: { en: 'Trends',        de: 'Verlauf' } },
+    { id: 'sessions',  label: { en: 'Sessions',      de: 'Sitzungen' } },
   ]
 
   return (
@@ -1430,6 +1558,7 @@ export default function AdminPanel({ adminName }: { adminName: string }) {
         {tab === 'import'    && <ImportTab lang={lang} />}
         {tab === 'usage'     && <UsageTab lang={lang} siteFilter={siteFilter} />}
         {tab === 'verlauf'   && <VerlaufTab lang={lang} siteFilter={siteFilter} />}
+        {tab === 'sessions'  && <SessionsTab lang={lang} adminUserId={adminUserId} />}
       </main>
     </div>
   )

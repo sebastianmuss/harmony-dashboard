@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { writeAudit, getIp } from '@/lib/audit'
 import { z } from 'zod'
@@ -17,7 +16,7 @@ const ClinicalDataSchema = z.object({
 
 // ── GET /api/clinical?patientId=&from=&to= ────────────────────────────────────
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions)
+  const session = await auth()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   // Patients can only see their own clinical data
@@ -52,7 +51,7 @@ export async function GET(req: NextRequest) {
 
 // ── POST /api/clinical ────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
+  const session = await auth()
   if (!session || !['provider', 'admin'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
