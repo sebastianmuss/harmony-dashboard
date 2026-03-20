@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { writeAudit, getIp } from '@/lib/audit'
 
 // POST /api/patients/[id]/override
 // Creates a one-time "treat as on HD today" override for a patient.
@@ -67,13 +68,35 @@ export async function DELETE(
   const patientId = parseInt(id)
   if (isNaN(patientId)) return NextResponse.json({ error: 'Invalid patient id' }, { status: 400 })
 
+  // Verify patient exists and belongs to provider's center
+  const patient = await prisma.patient.findUnique({
+    where: { id: patientId },
+    select: { id: true, center: true },
+  })
+  if (!patient) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (session.user.role === 'provider') {
+    if (!session.user.center || patient.center !== session.user.center) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
+
   const dateStr = new URL(req.url).searchParams.get('date') ?? new Date().toISOString().slice(0, 10)
   const date = new Date(dateStr)
   date.setUTCHours(0, 0, 0, 0)
 
   await prisma.dailyScheduleOverride.deleteMany({
     where: { patientId, date },
-  }).catch(() => {})
+  })
+
+  writeAudit({
+    actorType: session.user.role,
+    actorId: session.user.providerId ?? null,
+    action: 'delete',
+    resource: 'schedule_override',
+    resourceId: patientId,
+    changes: { patientId, date: dateStr },
+    ip: getIp(req),
+  })
 
   return NextResponse.json({ success: true })
 }

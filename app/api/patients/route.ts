@@ -9,7 +9,7 @@ import logger from '@/lib/logger'
 
 const CreatePatientSchema = z.object({
   patientCode:        z.string().min(1).max(20).toUpperCase(),
-  pin:                z.string().regex(/^\d{4,6}$/, 'PIN must be 4–6 digits'),
+  pin:                z.string().regex(/^\d{6}$/, 'PIN must be exactly 6 digits'),
   shiftId:            z.int().positive(),
   enrollmentDate:     z.string().date(),
   center:             z.string().min(1).optional(),
@@ -30,9 +30,9 @@ export async function GET(req: NextRequest) {
 
   const where: Record<string, unknown> = {}
   if (session.user.role === 'provider') {
-    // Providers see only their center's patients
-    if (session.user.center) where.center = session.user.center
-    else where.shiftId = session.user.shiftId
+    // Providers MUST have a center — no center means no data access
+    if (!session.user.center) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    where.center = session.user.center
   } else if (shiftId) {
     where.shiftId = parseInt(shiftId)
   }

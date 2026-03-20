@@ -2,6 +2,7 @@ import NextAuth from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import { PrismaAdapter } from '@auth/prisma-adapter'
 import bcrypt from 'bcryptjs'
+import { timingSafeEqual } from 'crypto'
 import { prisma } from '@/lib/db'
 import { pinIndexHash, validatePin } from '@/lib/pin'
 import logger from '@/lib/logger'
@@ -90,10 +91,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!patient) return null
 
         const inputCode = (credentials.patientCode as string).trim().toUpperCase()
-        if (inputCode !== patient.patientCode.toUpperCase()) return null
+        const expectedCode = patient.patientCode.toUpperCase()
+        // Constant-time comparison to prevent timing attacks that enumerate valid codes
+        const codeMatch =
+          inputCode.length === expectedCode.length &&
+          timingSafeEqual(Buffer.from(inputCode), Buffer.from(expectedCode))
 
         const valid = await bcrypt.compare(pin, patient.pin)
-        if (!valid) {
+        if (!codeMatch || !valid) {
           logger.warn({ patientCode: inputCode }, 'Failed patient login attempt')
           return null
         }
@@ -164,7 +169,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where:  { id: token.userId as string },
           select: { kickedAt: true },
         })
-        if (dbUser?.kickedAt && dbUser.kickedAt > new Date((token.iat as number) * 1000)) {
+        if (dbUser?.kickedAt && dbUser.kickedAt >= new Date((token.iat as number) * 1000)) {
           return null as any
         }
       }
