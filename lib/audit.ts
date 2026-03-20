@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 export interface AuditEntry {
   actorType: string
   actorId?: number | null
-  action: 'create' | 'update' | 'delete'
+  action: 'create' | 'update' | 'delete' | 'export' | 'import'
   resource: string
   resourceId?: number | null
   changes?: Record<string, unknown>
@@ -25,7 +25,9 @@ export function writeAudit(entry: AuditEntry): void {
       changes:   entry.changes ? JSON.parse(JSON.stringify(entry.changes)) : undefined,
       ip:        entry.ip        ?? null,
     },
-  }).catch(() => {})
+  }).catch((err: unknown) => {
+    process.stderr.write(`[audit] FAILED to write audit log: ${err instanceof Error ? err.message : String(err)}\n`)
+  })
 }
 
 /** Extract client IP from request headers (set by Caddy via x-forwarded-for). */

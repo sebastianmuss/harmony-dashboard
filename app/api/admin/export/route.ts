@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { writeAudit, getIp } from '@/lib/audit'
 
 // GET /api/admin/export?type=prom|clinical&center=
 // Returns a CSV download with one row per patient per session date.
@@ -59,6 +60,15 @@ export async function GET(req: NextRequest) {
       ].join(',')
     }).join('\n')
 
+    writeAudit({
+      actorType: session.user.role,
+      actorId: session.user.providerId ?? null,
+      action: 'export',
+      resource: 'prom',
+      changes: { rowCount: rows.length, center: center ?? 'all' },
+      ip: getIp(req),
+    })
+
     return new NextResponse(header + csv, {
       status: 200,
       headers: {
@@ -88,6 +98,15 @@ export async function GET(req: NextRequest) {
       r.diastolicBp ?? '',
       r.recordedAt.toISOString(),
     ].join(',')).join('\n')
+
+    writeAudit({
+      actorType: session.user.role,
+      actorId: session.user.providerId ?? null,
+      action: 'export',
+      resource: 'clinical',
+      changes: { rowCount: rows.length, center: center ?? 'all' },
+      ip: getIp(req),
+    })
 
     return new NextResponse(header + csv, {
       status: 200,

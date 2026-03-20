@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { writeAudit, getIp } from '@/lib/audit'
 
 /**
  * POST /api/admin/import
@@ -127,11 +128,20 @@ export async function POST(req: NextRequest) {
         create: { patientId, sessionDate, ...data },
       })
       imported++
-    } catch (e: any) {
-      errors.push(`Row ${rowNum}: DB error — ${e.message}`)
+    } catch (e: unknown) {
+      errors.push(`Row ${rowNum}: Failed to save data`)
       skipped++
     }
   }
+
+  writeAudit({
+    actorType: session.user.role,
+    actorId: session.user.providerId ?? null,
+    action: 'import',
+    resource: 'clinical',
+    changes: { imported, skipped, errorCount: errors.length },
+    ip: getIp(req),
+  })
 
   return NextResponse.json({ imported, skipped, errors })
 }

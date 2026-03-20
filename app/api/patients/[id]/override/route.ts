@@ -26,8 +26,12 @@ export async function POST(
   if (!patient || !patient.isActive) {
     return NextResponse.json({ error: 'Patient not found' }, { status: 404 })
   }
-  if (session.user.role === 'provider' && session.user.center && patient.center !== session.user.center) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // Providers with no center assignment are blocked; providers with a center
+  // can only access patients in that same center.
+  if (session.user.role === 'provider') {
+    if (!session.user.center || patient.center !== session.user.center) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
   }
 
   const body = await req.json().catch(() => ({}))

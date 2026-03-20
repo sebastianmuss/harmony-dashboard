@@ -33,12 +33,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(responses)
   }
 
+  // Providers must have a center assignment — no center = no data access
+  if (session.user.role === 'provider' && !session.user.center) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const where: Record<string, unknown> = {}
   if (patientId) where.patientId = parseInt(patientId)
   if (from || to) {
     where.sessionDate = {}
     if (from) (where.sessionDate as Record<string, unknown>).gte = new Date(from)
     if (to) (where.sessionDate as Record<string, unknown>).lte = new Date(to)
+  }
+  // Providers are strictly scoped to their own center
+  if (session.user.role === 'provider') {
+    where.patient = { center: session.user.center }
   }
 
   const responses = await prisma.promResponse.findMany({
@@ -73,6 +82,14 @@ export async function POST(req: NextRequest) {
   } else if (['provider', 'admin'].includes(session.user.role)) {
     if (!body.patientId) return NextResponse.json({ error: 'patientId required' }, { status: 400 })
     patientId = body.patientId
+    // Providers can only submit for patients in their own center
+    if (session.user.role === 'provider') {
+      if (!session.user.center) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      const target = await prisma.patient.findUnique({ where: { id: patientId }, select: { center: true } })
+      if (!target || target.center !== session.user.center) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    }
   } else {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -145,6 +162,29 @@ export async function DELETE(req: NextRequest) {
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
-  await prisma.promResponse.delete({ where: { id: parseInt(id) } })
+  // Verify the PROM exists and belongs to a patient in the provider's center
+  const prom = await prisma.promResponse.findUnique({
+    where: { id: parseInt(id) },
+    include: { patient: { select: { center: true } } },
+  })
+  if (!prom) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (session.user.role === 'provider') {
+    if (!session.user.center || prom.patient.center !== session.user.center) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
+
+  await prisma.promResponse.delete({ where: { id: prom.id } })
+
+  writeAudit({
+    actorType: session.user.role,
+    actorId: session.user.providerId ?? null,
+    action: 'delete',
+    resource: 'prom',
+    resourceId: prom.id,
+    changes: { patientId: prom.patientId, sessionDate: prom.sessionDate },
+    ip: getIp(req),
+  })
+
   return NextResponse.json({ success: true })
 }

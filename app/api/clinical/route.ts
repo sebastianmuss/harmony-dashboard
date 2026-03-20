@@ -34,12 +34,21 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
 
+  // Providers must have a center assignment — no center = no data access
+  if (session.user.role === 'provider' && !session.user.center) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const where: Record<string, unknown> = {}
   if (patientId) where.patientId = parseInt(patientId)
   if (from || to) {
     where.sessionDate = {}
     if (from) (where.sessionDate as Record<string, unknown>).gte = new Date(from)
     if (to) (where.sessionDate as Record<string, unknown>).lte = new Date(to)
+  }
+  // Providers are strictly scoped to their own center
+  if (session.user.role === 'provider') {
+    where.patient = { center: session.user.center }
   }
 
   const records = await prisma.clinicalData.findMany({
@@ -63,6 +72,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 })
   }
   const { patientId, sessionDate, preDialysisWeight, interdialyticWeightGain, systolicBp, diastolicBp } = parsed.data
+
+  // Providers can only write clinical data for patients in their own center
+  if (session.user.role === 'provider') {
+    if (!session.user.center) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const target = await prisma.patient.findUnique({ where: { id: patientId }, select: { center: true } })
+    if (!target || target.center !== session.user.center) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
 
   const date = new Date(sessionDate)
   date.setHours(0, 0, 0, 0)
