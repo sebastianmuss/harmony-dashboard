@@ -114,7 +114,10 @@ function DashboardTab({ lang, siteFilter }: { lang: Lang; siteFilter: string }) 
   useEffect(() => {
     setLoading(true)
     const q = siteFilter !== 'all' ? `?center=${encodeURIComponent(siteFilter)}` : ''
-    fetch(`/api/admin/dashboard${q}`).then((r) => r.json()).then(setData).finally(() => setLoading(false))
+    fetch(`/api/admin/dashboard${q}`)
+      .then((r) => r.json())
+      .then((json) => { if (json?.weeklyStats) setData(json) })
+      .finally(() => setLoading(false))
   }, [siteFilter])
 
   if (loading) return <div className="text-center py-12 text-slate-400">{lang === 'de' ? 'Lade Dashboard…' : 'Loading dashboard…'}</div>
