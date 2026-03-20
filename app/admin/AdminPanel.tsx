@@ -963,7 +963,7 @@ function UsageTab({ lang, siteFilter }: { lang: Lang; siteFilter: string }) {
   useEffect(() => { setCenterFilter(siteFilter) }, [siteFilter])
 
   useEffect(() => {
-    fetch('/api/admin/activity').then((r) => r.json()).then((json) => { if (json?.logs) setData(json) }).finally(() => setLoading(false))
+    fetch('/api/admin/activity').then((r) => r.json()).then((json) => { if (json?.patientActivity) setData(json) }).finally(() => setLoading(false))
   }, [])
 
   if (loading) return <div className="text-center py-12 text-slate-400">{lang === 'de' ? 'Lade Nutzungsdaten…' : 'Loading usage data…'}</div>
@@ -1217,7 +1217,7 @@ function VerlaufTab({ lang, siteFilter }: { lang: Lang; siteFilter: string }) {
     const q = siteFilter !== 'all' ? `?center=${encodeURIComponent(siteFilter)}` : ''
     fetch(`/api/trends${q}`)
       .then((r) => r.json())
-      .then((json) => { if (json?.weekly) setData(json) })
+      .then((json) => { if (json?.promTrends) setData(json) })
       .finally(() => setLoading(false))
   }, [siteFilter])
 
