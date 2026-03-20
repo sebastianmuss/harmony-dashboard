@@ -5,16 +5,16 @@ import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/db'
 import { pinIndexHash, validatePin } from '@/lib/pin'
 import logger from '@/lib/logger'
+import { authConfig } from '../auth.config'
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   adapter: PrismaAdapter(prisma),
   trustHost: true, // required when behind a reverse proxy (Caddy, nginx, etc.)
   // JWT is required for CredentialsProvider (Auth.js constraint).
   // Session revocation is implemented via kickedAt: the jwt callback
   // checks the DB on every request and invalidates the token if the user
   // was kicked after the token was issued.
-  session: { strategy: 'jwt', maxAge: 2 * 60 * 60 }, // 2h — inactivity timeout
-  pages: { signIn: '/login', error: '/login' },
 
   providers: [
     // ── Provider / Admin login (username + password) ──────────────────────
@@ -153,31 +153,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
 
   callbacks: {
-    // ── Deny by default ───────────────────────────────────────────────────
-    // Called by middleware on every request. Public paths are explicitly
-    // allowed; everything else requires a valid session.
-    authorized({ auth: session, request: { nextUrl } }) {
-      const isLoggedIn = !!session?.user
-      const path = nextUrl.pathname
-
-      // Always allow: login page and NextAuth's own endpoints
-      const isPublic =
-        path === '/login' ||
-        path.startsWith('/api/auth/')
-
-      if (isPublic) return true
-
-      // Not logged in — API routes get 401 JSON, pages get redirected
-      if (!isLoggedIn) {
-        if (path.startsWith('/api/')) {
-          return Response.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-        return false // NextAuth redirects to /login
-      }
-
-      return true
-    },
-
     async jwt({ token, user }) {
       if (user) {
         // First sign-in: store only the user ID in the token.

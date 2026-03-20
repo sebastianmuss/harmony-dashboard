@@ -1,5 +1,10 @@
-import { auth } from '@/lib/auth'
+import NextAuth from 'next-auth'
+import { authConfig } from './auth.config'
 import { NextResponse } from 'next/server'
+
+// Use the edge-safe config (no Prisma) for middleware.
+// The authorized() callback in authConfig enforces deny-by-default.
+const { auth } = NextAuth(authConfig)
 
 // ── In-memory rate limiter for login endpoint ────────────────────────────────
 const WINDOW_MS    = 15 * 60 * 1000
@@ -18,7 +23,6 @@ function allow(ip: string): boolean {
   return true
 }
 
-// Prune expired entries every 5 minutes
 setInterval(() => {
   const now = Date.now()
   for (const [key, val] of store) {
@@ -26,11 +30,7 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000)
 
-// auth() wraps our middleware and runs the `authorized` callback in auth.ts
-// first — that is where deny-by-default is enforced. This inner function
-// runs only if `authorized` returned true (i.e. the request is allowed).
 export default auth(function middleware(req) {
-  // Rate-limit the credentials login endpoint
   if (
     req.method === 'POST' &&
     req.nextUrl.pathname === '/api/auth/callback/credentials'
@@ -46,11 +46,9 @@ export default auth(function middleware(req) {
       )
     }
   }
-
   return NextResponse.next()
 })
 
-// Run on every request except static assets and Next.js internals
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }
