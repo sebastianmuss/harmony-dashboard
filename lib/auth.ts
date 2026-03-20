@@ -155,29 +155,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        // First sign-in: load full profile from auth_users into the token
-        const dbUser = await prisma.user.findUnique({ where: { id: user.id! } })
-        if (!dbUser) return token
-        token.userId             = dbUser.id
-        token.role               = dbUser.role as 'patient' | 'provider' | 'admin'
-        token.userType           = dbUser.role === 'patient' ? 'patient' : 'provider'
-        token.center             = dbUser.center ?? null
-        token.shiftId            = dbUser.shiftId ?? undefined
-        token.shiftName          = dbUser.shiftName ?? undefined
-        token.shiftSchedule      = dbUser.shiftSchedule ?? undefined
-        token.patientId          = dbUser.patientId ?? undefined
-        token.patientCode        = dbUser.patientCode ?? undefined
-        token.dialysisSchedule   = dbUser.dialysisSchedule ?? undefined
-        token.customDialysisDays = dbUser.customDialysisDays ?? undefined
-        token.providerId         = dbUser.providerId ?? undefined
+        // First sign-in: store only the user ID in the token.
+        // All profile data is fetched fresh from the DB in the session callback.
+        token.userId = user.id
       } else if (token.userId) {
-        // Subsequent requests: check if admin has kicked this user
+        // Subsequent requests: check if admin has kicked this user.
         const dbUser = await prisma.user.findUnique({
           where:  { id: token.userId as string },
           select: { kickedAt: true },
         })
         if (dbUser?.kickedAt && dbUser.kickedAt > new Date((token.iat as number) * 1000)) {
-          // Kicked after token was issued — invalidate the session
           return null as any
         }
       }
@@ -185,18 +172,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
 
     async session({ session, token }) {
-      session.user.id              = token.userId as string
-      session.user.role            = token.role as 'patient' | 'provider' | 'admin'
-      session.user.userType        = token.userType as 'patient' | 'provider'
-      session.user.center          = token.center as string | null
-      session.user.shiftId         = token.shiftId as number | undefined
-      session.user.shiftName       = token.shiftName as string | undefined
-      session.user.shiftSchedule   = token.shiftSchedule as string | undefined
-      if (token.patientId)                        session.user.patientId          = token.patientId as number
-      if (token.patientCode)                      session.user.patientCode        = token.patientCode as string
-      if (token.dialysisSchedule)                 session.user.dialysisSchedule   = token.dialysisSchedule as string
-      if (token.customDialysisDays !== undefined) session.user.customDialysisDays = token.customDialysisDays as string | null
-      if (token.providerId)                       session.user.providerId         = token.providerId as number
+      // Fetch fresh profile on every session read — keeps JWT payload minimal
+      // (only userId lives in the cookie) and ensures role/center changes
+      // take effect on the next request without requiring a re-login.
+      if (!token.userId) return session
+      const dbUser = await prisma.user.findUnique({ where: { id: token.userId as string } })
+      if (!dbUser) return session
+
+      session.user.id              = dbUser.id
+      session.user.role            = dbUser.role as 'patient' | 'provider' | 'admin'
+      session.user.userType        = dbUser.role === 'patient' ? 'patient' : 'provider'
+      session.user.center          = dbUser.center ?? null
+      session.user.shiftId         = dbUser.shiftId ?? undefined
+      session.user.shiftName       = dbUser.shiftName ?? undefined
+      session.user.shiftSchedule   = dbUser.shiftSchedule ?? undefined
+      if (dbUser.patientId)                        session.user.patientId          = dbUser.patientId
+      if (dbUser.patientCode)                      session.user.patientCode        = dbUser.patientCode
+      if (dbUser.dialysisSchedule)                 session.user.dialysisSchedule   = dbUser.dialysisSchedule
+      if (dbUser.customDialysisDays !== undefined) session.user.customDialysisDays = dbUser.customDialysisDays
+      if (dbUser.providerId)                       session.user.providerId         = dbUser.providerId
       return session
     },
   },
