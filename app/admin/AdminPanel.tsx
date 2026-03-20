@@ -221,7 +221,8 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
 
   const loadPatients = useCallback(async () => {
     const res = await fetch('/api/patients')
-    setPatients(await res.json())
+    const json = await res.json()
+    if (Array.isArray(json)) setPatients(json)
     setLoading(false)
   }, [])
 
@@ -523,7 +524,8 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
 
   const loadProviders = useCallback(async () => {
     const res = await fetch('/api/providers')
-    setProviders(await res.json())
+    const json = await res.json()
+    if (Array.isArray(json)) setProviders(json)
     setLoading(false)
   }, [])
 
@@ -961,7 +963,7 @@ function UsageTab({ lang, siteFilter }: { lang: Lang; siteFilter: string }) {
   useEffect(() => { setCenterFilter(siteFilter) }, [siteFilter])
 
   useEffect(() => {
-    fetch('/api/admin/activity').then((r) => r.json()).then(setData).finally(() => setLoading(false))
+    fetch('/api/admin/activity').then((r) => r.json()).then((json) => { if (json?.logs) setData(json) }).finally(() => setLoading(false))
   }, [])
 
   if (loading) return <div className="text-center py-12 text-slate-400">{lang === 'de' ? 'Lade Nutzungsdaten…' : 'Loading usage data…'}</div>
@@ -1215,7 +1217,7 @@ function VerlaufTab({ lang, siteFilter }: { lang: Lang; siteFilter: string }) {
     const q = siteFilter !== 'all' ? `?center=${encodeURIComponent(siteFilter)}` : ''
     fetch(`/api/trends${q}`)
       .then((r) => r.json())
-      .then(setData)
+      .then((json) => { if (json?.weekly) setData(json) })
       .finally(() => setLoading(false))
   }, [siteFilter])
 
@@ -1486,7 +1488,7 @@ export default function AdminPanel({ adminName, adminUserId }: { adminName: stri
   const [siteFilter, setSiteFilter] = useState<string>('all')
 
   useEffect(() => {
-    fetch('/api/shifts').then((r) => r.json()).then(setShifts)
+    fetch('/api/shifts').then((r) => r.json()).then((json) => { if (Array.isArray(json)) setShifts(json) })
   }, [])
 
   const tabs: { id: Tab; label: { en: string; de: string } }[] = [
