@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       skipped++
       continue
     }
-    sessionDate.setHours(0, 0, 0, 0)
+    sessionDate.setUTCHours(0, 0, 0, 0)
 
     // Build upsert data — only include columns present in CSV
     const data: Record<string, unknown> = {}

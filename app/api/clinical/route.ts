@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
   }
 
   const date = new Date(sessionDate)
-  date.setHours(0, 0, 0, 0)
+  date.setUTCHours(0, 0, 0, 0)
 
   const record = await prisma.clinicalData.upsert({
     where: { patientId_sessionDate: { patientId, sessionDate: date } },

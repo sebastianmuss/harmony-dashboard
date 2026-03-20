@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
 
   // Resolve session date (providers may specify; defaults to today)
   const sessionDate = body.sessionDate ? new Date(body.sessionDate) : new Date()
-  sessionDate.setHours(0, 0, 0, 0)
+  sessionDate.setUTCHours(0, 0, 0, 0)
 
   // Get study config
   const config = await prisma.studyConfig.findFirst()

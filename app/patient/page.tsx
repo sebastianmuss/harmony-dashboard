@@ -26,7 +26,7 @@ export default async function PatientPage() {
 
   // Determine if today is a dialysis day for this patient
   const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  today.setUTCHours(0, 0, 0, 0)
   const dialysisSchedule = session.user.dialysisSchedule ?? 'MWF'
   const customDialysisDays = session.user.customDialysisDays ?? null
   const onHDToday = isDialysisDay(today, dialysisSchedule, customDialysisDays)

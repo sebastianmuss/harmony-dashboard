@@ -34,7 +34,7 @@ export async function GET() {
   const timepoint = studyWeek ? getTimepointForWeek(studyWeek) : null
 
   const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  today.setUTCHours(0, 0, 0, 0)
 
   // Build patient filter: providers see their center's patients; admins see all
   const patientWhere: Record<string, unknown> = { isActive: true }
