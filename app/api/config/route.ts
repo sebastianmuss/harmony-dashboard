@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getCurrentStudyWeek, getTimepointForWeek } from '@/lib/study'
+import { z } from 'zod'
+
+const ConfigSchema = z.object({
+  studyStartDate: z.string().date(),
+  studyName:      z.string().min(1).max(100).optional(),
+})
 
 // ── GET /api/config ───────────────────────────────────────────────────────────
 export async function GET() {
@@ -33,12 +39,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const body = await req.json()
-  const { studyStartDate, studyName } = body
-
-  if (!studyStartDate) {
-    return NextResponse.json({ error: 'studyStartDate is required' }, { status: 400 })
+  const raw = await req.json()
+  const parsed = ConfigSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 })
   }
+  const { studyStartDate, studyName } = parsed.data
 
   const existing = await prisma.studyConfig.findFirst()
 

@@ -6,6 +6,7 @@ import { timingSafeEqual } from 'crypto'
 import { prisma } from '@/lib/db'
 import { pinIndexHash, validatePin } from '@/lib/pin'
 import logger from '@/lib/logger'
+import { writeAudit } from '@/lib/audit'
 import { authConfig } from '../auth.config'
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -37,6 +38,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const passwordValid = await bcrypt.compare(credentials.password as string, provider.passwordHash)
         if (!passwordValid) {
           logger.warn({ username: credentials.username }, 'Failed provider login attempt')
+          writeAudit({ actorType: 'provider', actorId: null, action: 'failed_login', resource: 'auth', resourceId: null, changes: { username: credentials.username }, ip: null })
           return null
         }
 
@@ -100,6 +102,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const valid = await bcrypt.compare(pin, patient.pin)
         if (!codeMatch || !valid) {
           logger.warn({ patientCode: inputCode }, 'Failed patient login attempt')
+          writeAudit({ actorType: 'patient', actorId: null, action: 'failed_login', resource: 'auth', resourceId: null, changes: { patientCode: inputCode }, ip: null })
           return null
         }
 

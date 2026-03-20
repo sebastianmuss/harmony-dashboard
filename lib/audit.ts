@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 export interface AuditEntry {
   actorType: string
   actorId?: number | null
-  action: 'create' | 'update' | 'delete' | 'export' | 'import'
+  action: 'create' | 'update' | 'delete' | 'export' | 'import' | 'failed_login'
   resource: string
   resourceId?: number | null
   changes?: Record<string, unknown>

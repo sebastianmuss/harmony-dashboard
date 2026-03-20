@@ -3,6 +3,16 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { writeAudit, getIp } from '@/lib/audit'
+import { z } from 'zod'
+
+const CreateProviderSchema = z.object({
+  name:     z.string().min(1).max(200),
+  username: z.string().min(3).max(100),
+  password: z.string().min(8).max(128),
+  role:     z.enum(['provider', 'admin']),
+  shiftId:  z.number().int().positive().nullable().optional(),
+  center:   z.string().max(100).nullable().optional(),
+})
 
 // ── GET /api/providers ────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -26,20 +36,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const body = await req.json()
-  const { name, username, password, role, shiftId, center } = body
-
-  if (!name || !username || !password || !role) {
-    return NextResponse.json({ error: 'name, username, password, and role are required' }, { status: 400 })
+  const raw = await req.json()
+  const parsed = CreateProviderSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 })
   }
-
-  if (!['provider', 'admin'].includes(role)) {
-    return NextResponse.json({ error: 'role must be "provider" or "admin"' }, { status: 400 })
-  }
-
-  if (password.length < 8) {
-    return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
-  }
+  const { name, username, password, role, shiftId, center } = parsed.data
 
   const existing = await prisma.provider.findUnique({ where: { username } })
   if (existing) {
