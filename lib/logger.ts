@@ -1,6 +1,9 @@
 import pino from 'pino'
 
-const isDev = process.env.NODE_ENV !== 'production'
+const isDev  = process.env.NODE_ENV !== 'production'
+// Edge Runtime (middleware) does not support Node.js worker threads,
+// which pino.transport requires. Fall back to plain JSON there.
+const isEdge = typeof (globalThis as any).EdgeRuntime !== 'undefined'
 
 const logger = pino(
   {
@@ -13,9 +16,9 @@ const logger = pino(
       censor: '[REDACTED]',
     },
   },
-  isDev
+  isDev && !isEdge
     ? pino.transport({ target: 'pino-pretty', options: { colorize: true, ignore: 'pid,hostname' } })
-    : undefined  // In production: plain JSON to stdout → captured by Docker / log aggregator
+    : undefined  // In production (and Edge): plain JSON to stdout
 )
 
 export default logger
