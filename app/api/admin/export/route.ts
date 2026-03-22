@@ -37,7 +37,6 @@ export async function GET(req: NextRequest) {
     const header = 'patient_code,center,date,study_week,timepoint,fluid_status,thirst,fluid_overload,submitted_at,entered_by\n'
     const csv = rows.map((r) => {
       const dateStr = r.sessionDate.toISOString().slice(0, 10)
-      // Find matching activity log: same patient, same day, prom_submit
       const submittedAt = r.submittedAt.toISOString()
       const matchLog = activityLogs.find(
         (l) =>
@@ -57,7 +56,7 @@ export async function GET(req: NextRequest) {
         r.fluidOverloadScore,
         submittedAt,
         enteredBy,
-      ].join(',')
+      ].map(csvCell).join(',')
     }).join('\n')
 
     writeAudit({
@@ -97,7 +96,7 @@ export async function GET(req: NextRequest) {
       r.systolicBp ?? '',
       r.diastolicBp ?? '',
       r.recordedAt.toISOString(),
-    ].join(',')).join('\n')
+    ].map(csvCell).join(',')).join('\n')
 
     writeAudit({
       actorType: session.user.role,
@@ -118,4 +117,10 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ error: 'Invalid type — use prom or clinical' }, { status: 400 })
+}
+
+// Wrap every value in double-quotes and escape internal quotes.
+// Prevents CSV formula injection when files are opened in Excel/LibreOffice.
+function csvCell(value: unknown): string {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`
 }

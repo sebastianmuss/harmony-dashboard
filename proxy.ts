@@ -1,10 +1,8 @@
-import NextAuth from 'next-auth'
-import { authConfig } from './auth.config'
+import { auth } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
-// Use the edge-safe config (no Prisma) for middleware.
-// The authorized() callback in authConfig enforces deny-by-default.
-const { auth } = NextAuth(authConfig)
+// proxy.ts runs in Node.js runtime (Next.js 16+).
+// auth() enforces deny-by-default via the authorized() callback in lib/auth.ts.
 
 // ── In-memory rate limiter for login endpoint ────────────────────────────────
 const WINDOW_MS    = 15 * 60 * 1000
@@ -30,7 +28,7 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000)
 
-export default auth(function middleware(req) {
+export default auth(function proxy(req) {
   if (
     req.method === 'POST' &&
     req.nextUrl.pathname === '/api/auth/callback/credentials'

@@ -7,10 +7,61 @@ import { prisma } from '@/lib/db'
 import { pinIndexHash, validatePin } from '@/lib/pin'
 import logger from '@/lib/logger'
 import { writeAudit } from '@/lib/audit'
-import { authConfig } from '../auth.config'
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  ...authConfig,
+  pages: { signIn: '/login', error: '/login' },
+  session: { strategy: 'jwt', maxAge: 2 * 60 * 60 },
+  callbacks: {
+    // Deny by default: every route requires a valid session unless explicitly public.
+    authorized({ auth: session, request: { nextUrl } }) {
+      const isLoggedIn = !!session?.user
+      const path = nextUrl.pathname
+      const isPublic = path === '/login' || path.startsWith('/api/auth/')
+      if (isPublic) return true
+      if (!isLoggedIn) {
+        if (path.startsWith('/api/')) {
+          return Response.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+        return false
+      }
+      return true
+    },
+
+    async jwt({ token, user }) {
+      if (user) {
+        token.userId = user.id
+      } else if (token.userId) {
+        const dbUser = await prisma.user.findUnique({
+          where:  { id: token.userId as string },
+          select: { kickedAt: true },
+        })
+        if (dbUser?.kickedAt && dbUser.kickedAt >= new Date((token.iat as number) * 1000)) {
+          return null as any
+        }
+      }
+      return token
+    },
+
+    async session({ session, token }) {
+      if (!token.userId) return session
+      const dbUser = await prisma.user.findUnique({ where: { id: token.userId as string } })
+      if (!dbUser) return session
+
+      session.user.id              = dbUser.id
+      session.user.role            = dbUser.role as 'patient' | 'provider' | 'admin'
+      session.user.userType        = dbUser.role === 'patient' ? 'patient' : 'provider'
+      session.user.center          = dbUser.center ?? null
+      session.user.shiftId         = dbUser.shiftId ?? undefined
+      session.user.shiftName       = dbUser.shiftName ?? undefined
+      session.user.shiftSchedule   = dbUser.shiftSchedule ?? undefined
+      if (dbUser.patientId)                        session.user.patientId          = dbUser.patientId
+      if (dbUser.patientCode)                      session.user.patientCode        = dbUser.patientCode
+      if (dbUser.dialysisSchedule)                 session.user.dialysisSchedule   = dbUser.dialysisSchedule
+      if (dbUser.customDialysisDays !== undefined) session.user.customDialysisDays = dbUser.customDialysisDays
+      if (dbUser.providerId)                       session.user.providerId         = dbUser.providerId
+      return session
+    },
+  },
   adapter: PrismaAdapter(prisma),
   trustHost: true, // required when behind a reverse proxy (Caddy, nginx, etc.)
   // JWT is required for CredentialsProvider (Auth.js constraint).
@@ -43,6 +94,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         const userId = `provider-${provider.id}`
+
+        // Remove stale auth row if provider was re-seeded with a new ID
+        await prisma.user.deleteMany({ where: { email: provider.username, id: { not: userId } } })
 
         // Upsert into auth_users and clear any previous kick
         await prisma.user.upsert({
@@ -157,49 +211,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           },
         })
       } catch { /* non-fatal */ }
-    },
-  },
-
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        // First sign-in: store only the user ID in the token.
-        // All profile data is fetched fresh from the DB in the session callback.
-        token.userId = user.id
-      } else if (token.userId) {
-        // Subsequent requests: check if admin has kicked this user.
-        const dbUser = await prisma.user.findUnique({
-          where:  { id: token.userId as string },
-          select: { kickedAt: true },
-        })
-        if (dbUser?.kickedAt && dbUser.kickedAt >= new Date((token.iat as number) * 1000)) {
-          return null as any
-        }
-      }
-      return token
-    },
-
-    async session({ session, token }) {
-      // Fetch fresh profile on every session read — keeps JWT payload minimal
-      // (only userId lives in the cookie) and ensures role/center changes
-      // take effect on the next request without requiring a re-login.
-      if (!token.userId) return session
-      const dbUser = await prisma.user.findUnique({ where: { id: token.userId as string } })
-      if (!dbUser) return session
-
-      session.user.id              = dbUser.id
-      session.user.role            = dbUser.role as 'patient' | 'provider' | 'admin'
-      session.user.userType        = dbUser.role === 'patient' ? 'patient' : 'provider'
-      session.user.center          = dbUser.center ?? null
-      session.user.shiftId         = dbUser.shiftId ?? undefined
-      session.user.shiftName       = dbUser.shiftName ?? undefined
-      session.user.shiftSchedule   = dbUser.shiftSchedule ?? undefined
-      if (dbUser.patientId)                        session.user.patientId          = dbUser.patientId
-      if (dbUser.patientCode)                      session.user.patientCode        = dbUser.patientCode
-      if (dbUser.dialysisSchedule)                 session.user.dialysisSchedule   = dbUser.dialysisSchedule
-      if (dbUser.customDialysisDays !== undefined) session.user.customDialysisDays = dbUser.customDialysisDays
-      if (dbUser.providerId)                       session.user.providerId         = dbUser.providerId
-      return session
     },
   },
 })
