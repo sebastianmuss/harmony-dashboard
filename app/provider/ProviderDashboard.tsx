@@ -723,14 +723,17 @@ function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, o
                 <ScoreBadge score={patient.todayProm.fluidOverloadScore} />
               </div>
             )}
-            {!patient.submittedToday && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setShowPromEntry(true) }}
-                className="text-xs bg-blue-600 text-white px-2.5 py-1 rounded-lg hover:bg-blue-700 font-semibold transition flex-shrink-0"
-              >
-                {enterPromLabel}
-              </button>
-            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowPromEntry(true) }}
+              className={clsx(
+                'text-xs px-2.5 py-1 rounded-lg font-semibold transition flex-shrink-0',
+                patient.submittedToday
+                  ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              )}
+            >
+              {enterPromLabel}
+            </button>
             <span className="text-slate-400 text-xs flex-shrink-0">{expanded ? '▲' : '▼'}</span>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5 flex-wrap">
