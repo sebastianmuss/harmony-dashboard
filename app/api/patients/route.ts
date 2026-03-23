@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
-import { pinIndexHash, validatePin } from '@/lib/pin'
+import { pinIndexHash, pinError } from '@/lib/pin'
 import { writeAudit, getIp } from '@/lib/audit'
 import { z } from 'zod'
 import logger from '@/lib/logger'
 
 const CreatePatientSchema = z.object({
   patientCode:        z.string().min(1).max(20).toUpperCase(),
-  pin:                z.string().regex(/^\d{6}$/, 'PIN must be exactly 6 digits'),
+  pin:                z.string().refine((p) => !pinError(p), (p) => ({ message: pinError(p) ?? 'Invalid PIN' })),
   shiftId:            z.int().positive(),
   enrollmentDate:     z.string().date(),
   center:             z.string().min(1).optional(),

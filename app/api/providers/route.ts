@@ -4,11 +4,14 @@ import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { writeAudit, getIp } from '@/lib/audit'
 import { z } from 'zod'
+import { isPasswordValid } from '@/lib/password'
 
 const CreateProviderSchema = z.object({
   name:     z.string().min(1).max(200),
   username: z.string().min(3).max(100),
-  password: z.string().min(8).max(128),
+  password: z.string().min(12).max(128).refine(isPasswordValid, {
+    message: 'Password must be at least 12 characters and include uppercase, lowercase, digit, and special character',
+  }),
   role:     z.enum(['provider', 'admin']),
   shiftId:  z.number().int().positive().nullable().optional(),
   center:   z.string().max(100).nullable().optional(),

@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { writeAudit, getIp } from '@/lib/audit'
+import { isPasswordValid } from '@/lib/password'
 
 // ── PATCH /api/providers/[id] ─────────────────────────────────────────────────
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -23,8 +24,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.center !== undefined) update.center = body.center ?? null
   if (body.isActive !== undefined) update.isActive = body.isActive
   if (body.password !== undefined) {
-    if (body.password.length < 8) {
-      return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
+    if (!isPasswordValid(body.password)) {
+      return NextResponse.json({ error: 'Password must be at least 12 characters and include uppercase, lowercase, digit, and special character' }, { status: 400 })
     }
     update.passwordHash = await bcrypt.hash(body.password, 12)
   }

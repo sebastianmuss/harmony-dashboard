@@ -5,9 +5,11 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, LineChart, Line, Legend,
 } from 'recharts'
+import Link from 'next/link'
 import clsx from 'clsx'
 import { format, parseISO } from 'date-fns'
 import { loess } from '@/lib/loess'
+import { checkPassword, PASSWORD_RULES_DE, PASSWORD_RULES_EN } from '@/lib/password'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Lang = 'en' | 'de'
@@ -518,7 +520,7 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [editProvider, setEditProvider] = useState<Provider | null>(null)
-  const [form, setForm] = useState({ name: '', username: '', password: '', role: 'provider', shiftId: '', center: 'Feldbach' })
+  const [form, setForm] = useState({ name: '', username: '', password: '', confirmPassword: '', role: 'provider', shiftId: '', center: 'Feldbach' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -532,22 +534,34 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   useEffect(() => { loadProviders() }, [loadProviders])
 
   function openAdd() {
-    setForm({ name: '', username: '', password: '', role: 'provider', shiftId: shifts[0]?.id.toString() ?? '', center: 'Feldbach' })
+    setForm({ name: '', username: '', password: '', confirmPassword: '', role: 'provider', shiftId: shifts[0]?.id.toString() ?? '', center: 'Feldbach' })
     setEditProvider(null)
     setShowAdd(true)
     setError(null)
   }
 
   function openEdit(p: Provider) {
-    setForm({ name: p.name, username: p.username, password: '', role: p.role, shiftId: p.shiftId?.toString() ?? '', center: p.center ?? 'Feldbach' })
+    setForm({ name: p.name, username: p.username, password: '', confirmPassword: '', role: p.role, shiftId: p.shiftId?.toString() ?? '', center: p.center ?? 'Feldbach' })
     setEditProvider(p)
     setShowAdd(true)
     setError(null)
   }
 
   async function saveProvider() {
-    setSaving(true)
     setError(null)
+    // Client-side password validation
+    const needsPwCheck = !editProvider || form.password.length > 0
+    if (needsPwCheck) {
+      if (form.password !== form.confirmPassword) {
+        setError(lang === 'de' ? 'Passwörter stimmen nicht überein' : 'Passwords do not match')
+        return
+      }
+      if (!editProvider && form.password.length === 0) {
+        setError(lang === 'de' ? 'Bitte ein Passwort eingeben' : 'Please enter a password')
+        return
+      }
+    }
+    setSaving(true)
     try {
       if (editProvider) {
         const body: Record<string, unknown> = { name: form.name, role: form.role, shiftId: form.shiftId ? parseInt(form.shiftId) : null, center: form.role === 'provider' ? form.center : null }
@@ -650,11 +664,40 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
               <label className="block text-sm font-semibold text-slate-600 mb-1">
                 {editProvider
                   ? (lang === 'de' ? 'Neues Passwort (leer lassen = unverändert)' : 'New Password (leave blank to keep)')
-                  : (lang === 'de' ? 'Passwort * (mind. 8 Zeichen)' : 'Password * (min. 8 chars)')}
+                  : (lang === 'de' ? 'Passwort *' : 'Password *')}
               </label>
               <input type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" placeholder="••••••••" />
+              {/* Live requirements — show when a password is being typed */}
+              {form.password.length > 0 && (() => {
+                const checks = checkPassword(form.password)
+                const rules = lang === 'de' ? PASSWORD_RULES_DE : PASSWORD_RULES_EN
+                return (
+                  <ul className="mt-2 space-y-0.5">
+                    {rules.map((r) => (
+                      <li key={r.key} className={clsx('text-xs flex items-center gap-1.5', checks[r.key] ? 'text-green-600' : 'text-slate-400')}>
+                        <span>{checks[r.key] ? '✓' : '○'}</span> {r.label}
+                      </li>
+                    ))}
+                  </ul>
+                )
+              })()}
             </div>
+            {/* Confirm password — show when a password is being entered */}
+            {(!editProvider || form.password.length > 0) && (
+              <div>
+                <label className="block text-sm font-semibold text-slate-600 mb-1">
+                  {lang === 'de' ? 'Passwort bestätigen *' : 'Confirm Password *'}
+                </label>
+                <input type="password" value={form.confirmPassword} onChange={(e) => setForm((f) => ({ ...f, confirmPassword: e.target.value }))}
+                  className={clsx('w-full border-2 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500',
+                    form.confirmPassword.length > 0 && form.password !== form.confirmPassword ? 'border-red-400' : 'border-slate-200'
+                  )} placeholder="••••••••" />
+                {form.confirmPassword.length > 0 && form.password !== form.confirmPassword && (
+                  <p className="text-xs text-red-500 mt-1">{lang === 'de' ? 'Passwörter stimmen nicht überein' : 'Passwords do not match'}</p>
+                )}
+              </div>
+            )}
             <div>
               <label className="block text-sm font-semibold text-slate-600 mb-1">
                 {lang === 'de' ? 'Rolle *' : 'Role *'}
@@ -1504,7 +1547,7 @@ export default function AdminPanel({ adminName, adminUserId }: { adminName: stri
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <header className="bg-blue-900 text-white px-4 py-3 shadow">
+      <header className="bg-blue-900 text-white px-4 py-3 shadow relative z-10">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="min-w-0">
             <h1 className="text-lg font-black leading-tight">HARMONY · {lang === 'de' ? 'Admin' : 'Admin'}</h1>
@@ -1519,9 +1562,9 @@ export default function AdminPanel({ adminName, adminUserId }: { adminName: stri
               <option value="all">{lang === 'de' ? 'Alle' : 'All'}</option>
               {CENTERS.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <a href="/provider" className="text-blue-200 hover:text-white text-xs border border-blue-600 px-2 py-1.5 rounded-lg transition whitespace-nowrap">
+            <Link href="/provider" className="text-blue-200 hover:text-white text-xs border border-blue-600 px-2 py-1.5 rounded-lg transition whitespace-nowrap">
               {lang === 'de' ? 'Pflege' : 'Providers'}
-            </a>
+            </Link>
             <button
               onClick={() => setLang((l) => l === 'de' ? 'en' : 'de')}
               className="text-blue-200 hover:text-white text-xs font-bold px-2 py-1.5 rounded-lg border border-blue-600 transition"

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
-import { pinIndexHash, validatePin } from '@/lib/pin'
+import { pinIndexHash, pinError } from '@/lib/pin'
 import { writeAudit, getIp } from '@/lib/audit'
 
 // ── PATCH /api/patients/[id] ──────────────────────────────────────────────────
@@ -28,8 +28,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.notes !== undefined) update.notes = body.notes
   if (body.dryWeight !== undefined) update.dryWeight = body.dryWeight ? parseFloat(body.dryWeight) : null
   if (body.pin !== undefined) {
-    if (!validatePin(body.pin)) {
-      return NextResponse.json({ error: 'PIN must be exactly 6 digits' }, { status: 400 })
+    const pinErr = pinError(body.pin)
+    if (pinErr) {
+      return NextResponse.json({ error: pinErr }, { status: 400 })
     }
     update.pin = await bcrypt.hash(body.pin, 12)
     update.pinIndexHash = pinIndexHash(body.pin)
