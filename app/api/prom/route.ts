@@ -6,12 +6,23 @@ import { writeAudit, getIp } from '@/lib/audit'
 import { z } from 'zod'
 import logger from '@/lib/logger'
 
+const RECOVERY_TIME_OPTIONS = ['0-2h', '3-6h', '7-12h', '>12h'] as const
+
 const PromSubmitSchema = z.object({
   fluidStatusScore:    z.int().min(1).max(5),
   thirstScore:         z.int().min(1).max(5),
   fluidOverloadScore:  z.int().min(1).max(5),
+  recoveryTime:        z.enum(RECOVERY_TIME_OPTIONS).nullable().optional(),
   patientId:   z.int().positive().optional(),
   sessionDate: z.string().date().optional(),
+})
+
+const PromEditSchema = z.object({
+  id:                  z.int().positive(),
+  fluidStatusScore:    z.int().min(1).max(5),
+  thirstScore:         z.int().min(1).max(5),
+  fluidOverloadScore:  z.int().min(1).max(5),
+  recoveryTime:        z.enum(RECOVERY_TIME_OPTIONS).nullable().optional(),
 })
 
 // ── GET /api/prom?patientId=&from=&to= ────────────────────────────────────────
@@ -71,7 +82,7 @@ export async function POST(req: NextRequest) {
     logger.warn({ path: '/api/prom', errors: parsed.error.flatten() }, 'PROM validation failed')
     return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 })
   }
-  const { fluidStatusScore, thirstScore, fluidOverloadScore } = parsed.data
+  const { fluidStatusScore, thirstScore, fluidOverloadScore, recoveryTime } = parsed.data
   const body = parsed.data
 
   // Resolve the target patient
@@ -124,6 +135,7 @@ export async function POST(req: NextRequest) {
       fluidStatusScore,
       thirstScore,
       fluidOverloadScore,
+      recoveryTime: recoveryTime ?? null,
     },
   })
 
@@ -133,7 +145,7 @@ export async function POST(req: NextRequest) {
     action: 'create',
     resource: 'prom',
     resourceId: response.id,
-    changes: { patientId, sessionDate: sessionDate.toISOString().slice(0, 10), fluidStatusScore, thirstScore, fluidOverloadScore },
+    changes: { patientId, sessionDate: sessionDate.toISOString().slice(0, 10), fluidStatusScore, thirstScore, fluidOverloadScore, recoveryTime: recoveryTime ?? null },
     ip: getIp(req),
   })
 
@@ -149,6 +161,65 @@ export async function POST(req: NextRequest) {
   }).catch(() => {})
 
   return NextResponse.json(response, { status: 201 })
+}
+
+// ── PATCH /api/prom — same-day edits by patient or provider ──────────────────
+export async function PATCH(req: NextRequest) {
+  const session = await auth()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const raw = await req.json()
+  const parsed = PromEditSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 })
+  }
+  const { id, fluidStatusScore, thirstScore, fluidOverloadScore, recoveryTime } = parsed.data
+
+  const prom = await prisma.promResponse.findUnique({
+    where: { id },
+    include: { patient: { select: { center: true } } },
+  })
+  if (!prom) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Patients can only edit their own PROM
+  if (session.user.role === 'patient') {
+    if (prom.patientId !== session.user.patientId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
+
+  // Providers can only edit PROMs in their center
+  if (session.user.role === 'provider') {
+    if (!session.user.center || prom.patient.center !== session.user.center) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
+
+  // Only allow edits on the same day the PROM was created
+  const today = new Date()
+  today.setUTCHours(0, 0, 0, 0)
+  const promDate = new Date(prom.sessionDate)
+  promDate.setUTCHours(0, 0, 0, 0)
+  if (promDate.getTime() !== today.getTime()) {
+    return NextResponse.json({ error: 'PROMs can only be edited on the same day they were submitted' }, { status: 403 })
+  }
+
+  const updated = await prisma.promResponse.update({
+    where: { id },
+    data: { fluidStatusScore, thirstScore, fluidOverloadScore, recoveryTime: recoveryTime ?? null },
+  })
+
+  writeAudit({
+    actorType: session.user.role,
+    actorId: session.user.patientId ?? session.user.providerId ?? null,
+    action: 'update',
+    resource: 'prom',
+    resourceId: id,
+    changes: { fluidStatusScore, thirstScore, fluidOverloadScore, recoveryTime: recoveryTime ?? null },
+    ip: getIp(req),
+  })
+
+  return NextResponse.json(updated)
 }
 
 // ── DELETE /api/prom?id= — providers/admins can delete a response ─────────────

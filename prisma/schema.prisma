@@ -150,6 +150,7 @@ model PromResponse {
   fluidStatusScore    Int      // 1-5: general wellbeing, bad in either direction
   thirstScore         Int      // 1-5
   fluidOverloadScore  Int      // 1-5
+  recoveryTime        String?  // '0-2h' | '3-6h' | '7-12h' | '>12h' — optional
   submittedAt         DateTime @default(now())
 
   patient             Patient  @relation(fields: [patientId], references: [id])

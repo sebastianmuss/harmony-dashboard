@@ -53,12 +53,14 @@ export default async function PatientPage() {
       timepointLabelEn={timepointLabelEn}
       alreadySubmitted={!!existing}
       dryWeight={patient?.dryWeight ? Number(patient.dryWeight) : null}
+      promId={existing?.id ?? null}
       existingScores={
         existing
           ? {
               fluidStatusScore: existing.fluidStatusScore,
               thirstScore: existing.thirstScore,
               fluidOverloadScore: existing.fluidOverloadScore,
+              recoveryTime: existing.recoveryTime ?? null,
             }
           : null
       }

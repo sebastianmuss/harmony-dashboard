@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       select: { actorType: true, actorId: true, createdAt: true },
     })
 
-    const header = 'patient_code,center,date,study_week,timepoint,fluid_status,thirst,fluid_overload,submitted_at,entered_by\n'
+    const header = 'patient_code,center,date,study_week,timepoint,fluid_status,thirst,fluid_overload,recovery_time,submitted_at,entered_by\n'
     const csv = rows.map((r) => {
       const dateStr = r.sessionDate.toISOString().slice(0, 10)
       const submittedAt = r.submittedAt.toISOString()
@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
         r.fluidStatusScore,
         r.thirstScore,
         r.fluidOverloadScore,
+        r.recoveryTime ?? '',
         submittedAt,
         enteredBy,
       ].map(csvCell).join(',')

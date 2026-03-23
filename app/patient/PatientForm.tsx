@@ -19,10 +19,12 @@ interface Props {
   timepointLabelEn: string
   alreadySubmitted: boolean
   dryWeight: number | null
+  promId: number | null
   existingScores: {
     fluidStatusScore: number
     thirstScore: number
     fluidOverloadScore: number
+    recoveryTime: string | null
   } | null
 }
 
@@ -33,6 +35,7 @@ interface PromEntry {
   fluidStatusScore: number
   thirstScore: number
   fluidOverloadScore: number
+  recoveryTime?: string | null
 }
 
 interface ClinicalEntry {
@@ -69,6 +72,13 @@ const T = {
         icon: '⚖️',
       },
     ],
+    recovery: {
+      label: 'Wie lange hat Ihre Erholung nach der Dialyse gedauert?',
+      sublabel: 'Zeit bis Sie sich nach der letzten Sitzung wieder erholt fühlten',
+      icon: '⏱️',
+      options: { '0-2h': '0–2 Std.', '3-6h': '3–6 Std.', '7-12h': '7–12 Std.', '>12h': '>12 Std.' } as Record<string, string>,
+      optional: '(optional)',
+    },
     submit: 'Antworten absenden',
     answersRequired: 'Bitte alle Fragen beantworten',
     saving: 'Wird gespeichert…',
@@ -77,6 +87,7 @@ const T = {
     confidential: 'Alle Ihre Antworten werden vertraulich behandelt.',
     thankYou: 'Vielen Dank!',
     savedOk: 'Ihre Antworten wurden erfolgreich gespeichert.',
+    editAnswers: 'Antworten ändern',
     weekOf: (w: number) => `Woche ${w} von 12`,
     viewProgress: 'Mein Verlauf ansehen',
     backToForm: 'Zurück',
@@ -129,6 +140,13 @@ const T = {
         icon: '⚖️',
       },
     ],
+    recovery: {
+      label: 'How long did your recovery take after dialysis?',
+      sublabel: 'Time until you felt recovered after your last session',
+      icon: '⏱️',
+      options: { '0-2h': '0–2 h', '3-6h': '3–6 h', '7-12h': '7–12 h', '>12h': '>12 h' } as Record<string, string>,
+      optional: '(optional)',
+    },
     submit: 'Submit answers',
     answersRequired: 'Please answer all questions',
     saving: 'Saving…',
@@ -137,6 +155,7 @@ const T = {
     confidential: 'All your answers are treated confidentially.',
     thankYou: 'Thank you!',
     savedOk: 'Your answers have been saved successfully.',
+    editAnswers: 'Edit answers',
     weekOf: (w: number) => `Week ${w} of 12`,
     viewProgress: 'View my progress',
     backToForm: 'Back',
@@ -184,7 +203,7 @@ const GRADE_HOVER: Record<number, string> = {
 }
 const SCORE_LINE_COLORS = { fluid: '#3b82f6', thirst: '#f59e0b', overload: '#ef4444' }
 
-type Scores = { fluidStatusScore: number | null; thirstScore: number | null; fluidOverloadScore: number | null }
+type Scores = { fluidStatusScore: number | null; thirstScore: number | null; fluidOverloadScore: number | null; recoveryTime: string | null }
 type View = 'form' | 'submitted' | 'history'
 type Lang = 'de' | 'en'
 
@@ -518,6 +537,7 @@ export default function PatientForm({
   timepointLabelEn,
   alreadySubmitted: initiallySubmitted,
   dryWeight,
+  promId: initialPromId,
   existingScores,
 }: Props) {
   const [lang, setLang] = useState<Lang>('de')
@@ -525,7 +545,9 @@ export default function PatientForm({
     fluidStatusScore: existingScores?.fluidStatusScore ?? null,
     thirstScore: existingScores?.thirstScore ?? null,
     fluidOverloadScore: existingScores?.fluidOverloadScore ?? null,
+    recoveryTime: existingScores?.recoveryTime ?? null,
   })
+  const [promId, setPromId] = useState<number | null>(initialPromId)
   const [view, setView] = useState<View>(initiallySubmitted ? 'submitted' : 'form')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -538,20 +560,25 @@ export default function PatientForm({
     setLoading(true)
     setError(null)
     try {
+      const isEdit = promId !== null
       const res = await fetch('/api/prom', {
-        method: 'POST',
+        method: isEdit ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fluidStatusScore: scores.fluidStatusScore,
-          thirstScore: scores.thirstScore,
-          fluidOverloadScore: scores.fluidOverloadScore,
-        }),
+        body: JSON.stringify(
+          isEdit
+            ? { id: promId, fluidStatusScore: scores.fluidStatusScore, thirstScore: scores.thirstScore, fluidOverloadScore: scores.fluidOverloadScore, recoveryTime: scores.recoveryTime }
+            : { fluidStatusScore: scores.fluidStatusScore, thirstScore: scores.thirstScore, fluidOverloadScore: scores.fluidOverloadScore, recoveryTime: scores.recoveryTime }
+        ),
       })
       if (res.status === 409) { setView('submitted'); return }
       if (!res.ok) {
         const data = await res.json()
         setError(data.error ?? t.unknownError)
         return
+      }
+      if (!isEdit) {
+        const data = await res.json()
+        setPromId(data.id)
       }
       setView('submitted')
     } catch {
@@ -594,7 +621,6 @@ export default function PatientForm({
 
   // ── Confirmation screen ───────────────────────────────────────────────────
   if (view === 'submitted') {
-    const displayScores = existingScores ?? scores
     return (
       <div className="min-h-screen bg-green-700 flex flex-col">
         <Header />
@@ -605,11 +631,11 @@ export default function PatientForm({
             <p className="text-slate-600 text-xl mb-1">{t.savedOk}</p>
             <p className="text-slate-400 text-lg mb-6">{t.weekOf(studyWeek)}</p>
 
-            {displayScores.fluidStatusScore !== null && (
-              <div className="grid grid-cols-3 gap-3 mb-6">
+            {scores.fluidStatusScore !== null && (
+              <div className="grid grid-cols-3 gap-3 mb-4">
                 {t.questions.map((q, i) => {
                   const keys = ['fluidStatusScore', 'thirstScore', 'fluidOverloadScore'] as const
-                  const score = displayScores[keys[i]] ?? 0
+                  const score = scores[keys[i]] ?? 0
                   return (
                     <div key={i} className="bg-slate-50 rounded-2xl p-4">
                       <div className="text-3xl mb-2">{q.icon}</div>
@@ -623,11 +649,24 @@ export default function PatientForm({
               </div>
             )}
 
+            {scores.recoveryTime && (
+              <div className="bg-slate-50 rounded-2xl px-4 py-3 mb-6 flex items-center justify-center gap-2">
+                <span className="text-xl">{t.recovery.icon}</span>
+                <span className="text-slate-600 font-semibold">{t.recovery.options[scores.recoveryTime]}</span>
+              </div>
+            )}
+
             <button
               onClick={() => setView('history')}
               className="w-full h-14 rounded-2xl bg-blue-700 text-white text-lg font-bold hover:bg-blue-800 transition-all mb-3"
             >
               {t.viewProgress}
+            </button>
+            <button
+              onClick={() => setView('form')}
+              className="w-full h-12 rounded-2xl bg-slate-100 text-slate-600 text-base font-semibold hover:bg-slate-200 transition-all mb-3"
+            >
+              {t.editAnswers}
             </button>
             <button
               onClick={() => signOut({ callbackUrl: '/login' })}
@@ -703,6 +742,36 @@ export default function PatientForm({
               </div>
             )
           })}
+        </div>
+
+        {/* Recovery time — optional 4th question */}
+        <div className="bg-white rounded-2xl p-5 shadow-lg">
+          <div className="flex items-start gap-3 mb-4">
+            <span className="text-3xl sm:text-4xl flex-shrink-0">{t.recovery.icon}</span>
+            <div>
+              <p className="text-slate-800 text-lg sm:text-xl font-bold leading-tight">{t.recovery.label}</p>
+              <p className="text-slate-500 text-sm mt-1">{t.recovery.sublabel} <span className="text-slate-400">{t.recovery.optional}</span></p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {(['0-2h', '3-6h', '7-12h', '>12h'] as const).map((opt) => {
+              const isSelected = scores.recoveryTime === opt
+              return (
+                <button
+                  key={opt}
+                  onClick={() => setScores((prev) => ({ ...prev, recoveryTime: prev.recoveryTime === opt ? null : opt }))}
+                  className={clsx(
+                    'py-4 sm:py-5 rounded-xl border-4 font-black text-xl transition-all duration-150 active:scale-95',
+                    isSelected
+                      ? 'bg-blue-600 border-blue-700 text-white shadow-lg scale-105'
+                      : 'border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50'
+                  )}
+                >
+                  {t.recovery.options[opt]}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {error && (

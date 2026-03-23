@@ -6,6 +6,7 @@ import {
   ResponsiveContainer, ReferenceLine, ComposedChart, Bar,
 } from 'recharts'
 import { format, parseISO } from 'date-fns'
+import Link from 'next/link'
 import clsx from 'clsx'
 import { loess } from '@/lib/loess'
 import { computeBoxplot, groupByStudyWeek } from '@/lib/boxplot'
@@ -20,6 +21,7 @@ interface PromEntry {
   fluidStatusScore: number
   thirstScore: number
   fluidOverloadScore: number
+  recoveryTime: string | null
   submittedAt: string
 }
 
@@ -538,6 +540,14 @@ function ClinicalDataForm({
   )
 }
 
+const RECOVERY_OPTIONS = ['0-2h', '3-6h', '7-12h', '>12h'] as const
+const RECOVERY_LABELS: Record<string, Record<Lang, string>> = {
+  '0-2h':  { de: '0–2 Std.', en: '0–2 h' },
+  '3-6h':  { de: '3–6 Std.', en: '3–6 h' },
+  '7-12h': { de: '7–12 Std.', en: '7–12 h' },
+  '>12h':  { de: '>12 Std.', en: '>12 h' },
+}
+
 // ── PromEntryModal ────────────────────────────────────────────────────────────
 function PromEntryModal({ patient, timepoint, lang, onClose, onSaved }: {
   patient: PatientData
@@ -546,8 +556,14 @@ function PromEntryModal({ patient, timepoint, lang, onClose, onSaved }: {
   onClose: () => void
   onSaved: () => void
 }) {
-  const [scores, setScores] = useState<{ fluidStatusScore: number | null; thirstScore: number | null; fluidOverloadScore: number | null }>({
-    fluidStatusScore: null, thirstScore: null, fluidOverloadScore: null,
+  const existingProm = patient.todayProm
+  const isEdit = existingProm !== null
+
+  const [scores, setScores] = useState<{ fluidStatusScore: number | null; thirstScore: number | null; fluidOverloadScore: number | null; recoveryTime: string | null }>({
+    fluidStatusScore:  existingProm?.fluidStatusScore  ?? null,
+    thirstScore:       existingProm?.thirstScore       ?? null,
+    fluidOverloadScore: existingProm?.fluidOverloadScore ?? null,
+    recoveryTime:      existingProm?.recoveryTime      ?? null,
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -559,9 +575,13 @@ function PromEntryModal({ patient, timepoint, lang, onClose, onSaved }: {
     setSaving(true)
     setError(null)
     const res = await fetch('/api/prom', {
-      method: 'POST',
+      method: isEdit ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ patientId: patient.id, ...scores }),
+      body: JSON.stringify(
+        isEdit
+          ? { id: existingProm.id, fluidStatusScore: scores.fluidStatusScore, thirstScore: scores.thirstScore, fluidOverloadScore: scores.fluidOverloadScore, recoveryTime: scores.recoveryTime }
+          : { patientId: patient.id, fluidStatusScore: scores.fluidStatusScore, thirstScore: scores.thirstScore, fluidOverloadScore: scores.fluidOverloadScore, recoveryTime: scores.recoveryTime }
+      ),
     })
     setSaving(false)
     if (res.status === 409) { onSaved(); onClose(); return }
@@ -570,14 +590,17 @@ function PromEntryModal({ patient, timepoint, lang, onClose, onSaved }: {
   }
 
   const tpLabel = timepoint ? (TIMEPOINT_LABELS[timepoint]?.[lang] ?? timepoint) : null
+  const titleLabel = isEdit
+    ? (lang === 'de' ? 'PROM bearbeiten' : 'Edit PROM')
+    : (lang === 'de' ? 'PROM erfassen' : 'Enter PROM')
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div>
             <h3 className="text-lg font-bold text-slate-800">
-              {lang === 'de' ? 'PROM erfassen' : 'Enter PROM'} — {patient.patientCode}
+              {titleLabel} — {patient.patientCode}
             </h3>
             {tpLabel && <p className="text-sm text-slate-500 mt-0.5">{lang === 'de' ? 'Zeitpunkt:' : 'Timepoint:'} <span className="font-semibold">{tpLabel}</span></p>}
           </div>
@@ -607,6 +630,32 @@ function PromEntryModal({ patient, timepoint, lang, onClose, onSaved }: {
               </div>
             </div>
           ))}
+
+          {/* Recovery time — optional */}
+          <div>
+            <p className="text-sm font-semibold text-slate-700 mb-0.5">
+              {lang === 'de' ? 'Erholungszeit nach Dialyse' : 'Recovery time after dialysis'}
+              <span className="text-slate-400 font-normal ml-1">({lang === 'de' ? 'optional' : 'optional'})</span>
+            </p>
+            <div className="grid grid-cols-4 gap-2 mt-1">
+              {RECOVERY_OPTIONS.map((opt) => {
+                const selected = scores.recoveryTime === opt
+                return (
+                  <button
+                    key={opt}
+                    onClick={() => setScores((s) => ({ ...s, recoveryTime: s.recoveryTime === opt ? null : opt }))}
+                    className={clsx(
+                      'h-10 rounded-xl border-2 font-semibold text-sm transition-all',
+                      selected ? 'bg-blue-600 border-blue-700 text-white' : 'border-slate-300 bg-white text-slate-600 hover:border-blue-400 hover:bg-blue-50'
+                    )}
+                  >
+                    {RECOVERY_LABELS[opt][lang]}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg p-3">{error}</p>}
           <div className="flex gap-3 pt-1">
             <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-semibold hover:bg-slate-50">
@@ -640,7 +689,9 @@ function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, o
   const [overriding, setOverriding] = useState(false)
 
   const clinicalTodayLabel = lang === 'de' ? 'Klinische Daten heute' : 'Clinical Data Today'
-  const enterPromLabel = lang === 'de' ? 'PROM erfassen' : 'Enter PROM'
+  const enterPromLabel = patient.submittedToday
+    ? (lang === 'de' ? 'PROM bearbeiten' : 'Edit PROM')
+    : (lang === 'de' ? 'PROM erfassen' : 'Enter PROM')
   const noDataLabel    = lang === 'de' ? 'Keine Daten für heute' : 'No clinical data for today'
 
   // Dot + border color: green = submitted, yellow = on HD today, grey = not on HD
@@ -853,9 +904,9 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
           </div>
           <div className="flex gap-1.5 items-center flex-shrink-0">
             {role === 'admin' && (
-              <a href="/admin" className="text-blue-200 hover:text-white text-xs border border-blue-500 px-2 py-1.5 rounded-lg transition whitespace-nowrap">
+              <Link href="/admin" className="text-blue-200 hover:text-white text-xs border border-blue-500 px-2 py-1.5 rounded-lg transition whitespace-nowrap">
                 Admin
-              </a>
+              </Link>
             )}
             <button
               onClick={() => setLang((l) => l === 'en' ? 'de' : 'en')}
