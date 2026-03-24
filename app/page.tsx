@@ -5,7 +5,6 @@ import Link from 'next/link'
 export default async function RootPage() {
   const session = await auth()
 
-  // Authenticated users go straight to their dashboard
   if (session) {
     const role = session.user.role
     if (role === 'patient')  redirect('/patient')
@@ -38,21 +37,21 @@ export default async function RootPage() {
       </header>
 
       {/* Hero */}
-      <section className="flex-1 flex flex-col items-center justify-center text-center px-6 py-16">
+      <section className="flex flex-col items-center justify-center text-center px-6 pt-12 pb-10">
         <span className="text-xs font-semibold tracking-widest text-blue-600 uppercase mb-4">
-          Feasibility Study · Medical University of Vienna
+          Feasibility Trial · Medical University of Vienna
         </span>
-        <h1 className="text-4xl sm:text-5xl font-bold text-slate-800 max-w-2xl leading-tight mb-6">
+        <h1 className="text-4xl sm:text-5xl font-bold text-slate-800 max-w-2xl leading-tight mb-5">
           HARMONY
         </h1>
-        <p className="text-lg text-slate-600 max-w-xl leading-relaxed mb-4">
-          A shared decision-making dashboard for fluid management in hemodialysis.
+        <p className="text-lg text-slate-600 max-w-2xl leading-relaxed mb-3">
+          A shared decision-making dashboard for fluid management in haemodialysis.
         </p>
-        <p className="text-sm text-slate-500 max-w-lg leading-relaxed mb-10">
-          A 12-week feasibility trial supporting patient-reported outcome collection,
-          clinical data entry, and study monitoring across participating dialysis centres in Austria.
+        <p className="text-sm text-slate-500 max-w-xl leading-relaxed mb-10">
+          A transnational feasibility trial (Austria, Ireland, Scotland) integrating routinely
+          collected dialysis data with patient-reported symptoms to enable patient-centred
+          fluid management decisions.
         </p>
-
         <Link
           href="/login"
           className="inline-flex items-center gap-2 bg-blue-600 text-white font-semibold px-8 py-3.5 rounded-xl hover:bg-blue-700 active:bg-blue-800 transition text-base shadow-sm"
@@ -64,38 +63,82 @@ export default async function RootPage() {
         </Link>
       </section>
 
-      {/* Feature highlights */}
-      <section className="max-w-4xl mx-auto w-full px-6 pb-16 grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          {
-            title: 'Patient-Reported Outcomes',
-            body: 'Patients log fluid status, thirst, and recovery time at every session via a simple, large-touch interface.',
-          },
-          {
-            title: 'Clinical Monitoring',
-            body: 'Nursing staff enter weight, IDWG, and blood pressure. Trend charts and alerts support clinical decision-making.',
-          },
-          {
-            title: 'Feasibility Tracking',
-            body: 'Study coordinators monitor participation rates, data completeness, and PROM trends across the 12-week period.',
-          },
-        ].map((f) => (
-          <div key={f.title} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm text-left">
-            <h3 className="font-semibold text-slate-800 mb-1.5">{f.title}</h3>
-            <p className="text-sm text-slate-500 leading-relaxed">{f.body}</p>
+      {/* Rationale */}
+      <section className="max-w-3xl mx-auto w-full px-6 py-10">
+        <h2 className="text-xs font-semibold tracking-widest text-blue-600 uppercase mb-4">Study Rationale</h2>
+        <p className="text-slate-600 leading-relaxed text-sm">
+          Fluid status in haemodialysis is strongly associated with acute symptoms, hospitalisation,
+          and cardiovascular mortality. Despite technological advances, routine fluid management
+          practice — target weight estimation and interdialytic weight gain control — has changed
+          little in decades. HARMONY frames fluid management as a complex intervention requiring
+          systems-level support: integrating routinely collected dialysis data with patient-reported
+          symptoms to enable truly shared, patient-centred decisions. The intervention design is
+          underpinned by Social Cognitive Theory, drawing on established behaviour-change mechanisms
+          related to self-efficacy, feedback, and shared decision-making.
+        </p>
+      </section>
+
+      {/* Objectives */}
+      <section className="max-w-3xl mx-auto w-full px-6 py-4">
+        <h2 className="text-xs font-semibold tracking-widest text-blue-600 uppercase mb-4">Study Objectives</h2>
+        <div className="space-y-3">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <h3 className="font-semibold text-slate-800 mb-1">Primary Objective</h3>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              To assess the feasibility of conducting a pragmatic, multicentre, cluster randomised
+              trial of data-enabled shared decision-making for fluid management in haemodialysis.
+            </p>
           </div>
-        ))}
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <h3 className="font-semibold text-slate-800 mb-2">Secondary Objectives</h3>
+            <ul className="text-sm text-slate-500 leading-relaxed space-y-1.5 list-none">
+              {[
+                'Estimate signals of effect on intradialytic hypotension',
+                'Characterise adherence to the platform by patients and clinicians',
+                'Describe data completeness and process metrics to refine the intervention and trial procedures',
+                'Assess quality of life status',
+                'Evaluate shared decision-making (NICE framework survey)',
+              ].map((o, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="text-blue-400 font-semibold flex-shrink-0">{['i','ii','iii','iv','v'][i]}.</span>
+                  {o}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* Design */}
+      <section className="max-w-3xl mx-auto w-full px-6 py-10">
+        <h2 className="text-xs font-semibold tracking-widest text-blue-600 uppercase mb-4">Study Design</h2>
+        <p className="text-slate-600 leading-relaxed text-sm mb-6">
+          Prospective, multicentre, cluster randomised, open-label, waitlist-controlled feasibility
+          trial. Clusters (dialysis centres) are randomised 1:1 to intervention or waitlist control.
+          Centres randomised to intervention receive 12 weeks of exposure to the fluid dashboard web
+          application. Control centres receive standard of care for 12 weeks before crossing over to
+          the intervention. The waitlist-controlled design minimises contamination between clinicians
+          and patients while ensuring all centres ultimately receive the platform.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            { title: 'Patient-Reported Outcomes', body: 'Patients log fluid status, thirst, and recovery time at every session via a simple large-touch interface.' },
+            { title: 'Clinical Monitoring', body: 'Nursing staff enter weight, IDWG, and blood pressure. Trend charts support clinical decision-making.' },
+            { title: 'Feasibility Tracking', body: 'Study coordinators monitor participation rates, data completeness, and PROM trends across the 12-week period.' },
+          ].map((f) => (
+            <div key={f.title} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+              <h3 className="font-semibold text-slate-800 mb-1.5">{f.title}</h3>
+              <p className="text-sm text-slate-500 leading-relaxed">{f.body}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white/60 py-5 px-8">
+      <footer className="border-t border-slate-200 bg-white/60 mt-auto py-5 px-8">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400">
-          <span>
-            © 2026 Sebastian Mussnig · Medical University of Vienna, Division of Nephrology and Dialysis
-          </span>
-          <span>
-            Data hosted within the EU · GDPR compliant
-          </span>
+          <span>© 2026 Sebastian Mussnig · Medical University of Vienna, Division of Nephrology and Dialysis</span>
+          <span>Data hosted within the EU · GDPR compliant</span>
         </div>
       </footer>
 

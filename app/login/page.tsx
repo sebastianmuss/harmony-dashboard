@@ -78,6 +78,17 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-blue-900 flex flex-col items-center justify-center p-4">
+      {/* Back link */}
+      <a
+        href="/"
+        className="absolute top-5 left-6 text-blue-300 hover:text-white text-sm flex items-center gap-1.5 transition"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+        About HARMONY
+      </a>
+
       {/* Logo / Title */}
       <div className="mb-8 text-center">
         <h1 className="text-5xl font-black text-white tracking-tight">HARMONY</h1>
