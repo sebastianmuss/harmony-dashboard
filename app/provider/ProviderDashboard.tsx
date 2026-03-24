@@ -50,6 +50,8 @@ interface PatientData {
   todayClinical: ClinicalEntry | null
   promHistory: PromEntry[]
   clinicalHistory: ClinicalEntry[]
+  lastPromDate: string | null
+  lastClinicalDate: string | null
 }
 
 interface ShiftData {
@@ -246,6 +248,17 @@ const GRADE_HOVER: Record<number, string> = {
   3: 'hover:border-yellow-500 hover:bg-yellow-50',
   4: 'hover:border-orange-500 hover:bg-orange-50',
   5: 'hover:border-red-600 hover:bg-red-50',
+}
+
+function PromStaleness({ lastPromDate, lang }: { lastPromDate: string | null; lang: Lang }) {
+  if (!lastPromDate) {
+    return <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-semibold">{lang === 'de' ? 'Noch keine PROM' : 'No PROM yet'}</span>
+  }
+  const days = Math.floor((Date.now() - new Date(lastPromDate).getTime()) / 86_400_000)
+  if (days <= 7) return null
+  const label = lang === 'de' ? `Letzte PROM: ${days}d` : `Last PROM: ${days}d ago`
+  const cls = days > 14 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+  return <span className={clsx(cls, 'px-1.5 py-0.5 rounded font-semibold')}>{label}</span>
 }
 
 function ScoreBadge({ score }: { score: number }) {
@@ -740,6 +753,7 @@ function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, o
             <span>{patient.center}</span>
             <span>·</span>
             <span>{patient.promHistory.length} sessions</span>
+            <PromStaleness lastPromDate={patient.lastPromDate} lang={lang} />
             {patient.isLongGapToday && <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-semibold">Long gap</span>}
             {!patient.onHDToday && <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-semibold">{lang === 'de' ? 'Kein HD-Tag' : 'No HD today'}</span>}
             {patient.hdOverrideActive && <span className="bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded font-semibold text-xs">{lang === 'de' ? 'Einmalig hinzugefügt' : 'Override'}</span>}

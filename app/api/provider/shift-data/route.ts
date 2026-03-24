@@ -98,6 +98,9 @@ export async function GET() {
     const hasOverride = overridePatientIds.has(patient.id)
     const onHDToday = scheduledHD || hasOverride
 
+    const lastProm = patient.promResponses.at(-1)
+    const lastClinical = patient.clinicalData.at(-1)
+
     return {
       id: patient.id,
       patientCode: patient.patientCode,
@@ -115,6 +118,8 @@ export async function GET() {
       todayClinical: todayClinical ?? null,
       promHistory: patient.promResponses,
       clinicalHistory: patient.clinicalData,
+      lastPromDate: lastProm?.sessionDate ?? null,
+      lastClinicalDate: lastClinical?.sessionDate ?? null,
     }
   })
 

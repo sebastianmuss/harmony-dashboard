@@ -42,12 +42,16 @@ export async function GET(req: NextRequest) {
     include: {
       shift: { select: { id: true, name: true, schedule: true, timeOfDay: true } },
       _count: { select: { promResponses: true } },
+      promResponses: { orderBy: { sessionDate: 'desc' }, take: 1, select: { sessionDate: true } },
     },
     orderBy: [{ center: 'asc' }, { patientCode: 'asc' }],
   })
 
   // Never return PIN hashes to the client
-  return NextResponse.json(patients.map(({ pin: _pin, pinIndexHash: _idx, ...p }) => p))
+  return NextResponse.json(patients.map(({ pin: _pin, pinIndexHash: _idx, promResponses, ...p }) => ({
+    ...p,
+    lastPromDate: promResponses[0]?.sessionDate ?? null,
+  })))
 }
 
 // ── POST /api/patients ────────────────────────────────────────────────────────

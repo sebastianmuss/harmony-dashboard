@@ -35,6 +35,7 @@ interface Patient {
   notes: string | null
   shift: { id: number; name: string; schedule: string }
   _count: { promResponses: number }
+  lastPromDate: string | null
 }
 
 interface Provider {
@@ -353,6 +354,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
               <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Schicht' : 'Shift'}</th>
               <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Einschr.' : 'Enrolled'}</th>
               <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Sitzungen' : 'Sessions'}</th>
+              <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Letzte PROM' : 'Last PROM'}</th>
               <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Aktionen' : 'Actions'}</th>
             </tr>
           </thead>
@@ -369,6 +371,13 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
                 <td className="py-2.5 px-4 text-slate-500">{p.shift.name}</td>
                 <td className="py-2.5 px-4 text-slate-500">{p.enrollmentDate.slice(0, 10)}</td>
                 <td className="py-2.5 px-4">{p._count.promResponses}</td>
+                <td className="py-2.5 px-4">
+                  {p.lastPromDate ? (() => {
+                    const days = Math.floor((Date.now() - new Date(p.lastPromDate).getTime()) / 86_400_000)
+                    const color = days > 14 ? 'text-red-600 font-semibold' : days > 7 ? 'text-amber-600' : 'text-slate-500'
+                    return <span className={color}>{p.lastPromDate.slice(0, 10)} <span className="text-xs">({days}d)</span></span>
+                  })() : <span className="text-red-500 text-xs font-semibold">{lang === 'de' ? 'Keine' : 'None'}</span>}
+                </td>
                 <td className="py-2.5 px-4 flex gap-2">
                   <button onClick={() => openEdit(p)} className="text-blue-600 hover:underline text-xs">
                     {lang === 'de' ? 'Bearbeiten' : 'Edit'}
