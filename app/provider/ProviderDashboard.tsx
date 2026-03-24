@@ -724,7 +724,10 @@ function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, o
 
   return (
     <div className={clsx('bg-white rounded-xl border-2 shadow-sm overflow-hidden transition-all', borderColor)}>
-      <div className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => setExpanded((e) => !e)}>
+      <div className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => setExpanded((e) => {
+        if (!e) fetch(`/api/patients/${patient.id}/view`, { method: 'POST' }).catch(() => {})
+        return !e
+      })}>
         <div className={clsx('w-3 h-3 rounded-full flex-shrink-0 mt-1.5', dotColor)} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">

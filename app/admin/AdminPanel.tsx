@@ -1532,6 +1532,60 @@ function SessionsTab({ lang, adminUserId }: { lang: Lang; adminUserId: string })
   )
 }
 
+// ── Audit Integrity Panel ──────────────────────────────────────────────────────
+function AuditIntegrityPanel({ lang }: { lang: Lang }) {
+  const [result, setResult] = useState<{ valid: boolean; totalEntries: number; legacyEntries: number; tamperedIds: number[] } | null>(null)
+  const [checking, setChecking] = useState(false)
+
+  async function runCheck() {
+    setChecking(true)
+    setResult(null)
+    const res = await fetch('/api/admin/audit-verify')
+    if (res.ok) setResult(await res.json())
+    setChecking(false)
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-5 mt-6">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="font-semibold text-slate-800">{lang === 'de' ? 'Audit-Protokoll Integrität' : 'Audit Log Integrity'}</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {lang === 'de'
+              ? 'Prüft die kryptografische Hash-Kette des Audit-Protokolls auf Manipulation.'
+              : 'Verifies the cryptographic hash chain of the audit log for tampering.'}
+          </p>
+        </div>
+        <button
+          onClick={runCheck}
+          disabled={checking}
+          className="text-sm bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 disabled:opacity-50 font-semibold transition"
+        >
+          {checking ? (lang === 'de' ? 'Prüfe…' : 'Checking…') : (lang === 'de' ? 'Jetzt prüfen' : 'Run Check')}
+        </button>
+      </div>
+      {result && (
+        <div className={`rounded-lg p-4 text-sm ${result.valid ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+          <p className={`font-semibold ${result.valid ? 'text-green-800' : 'text-red-800'}`}>
+            {result.valid
+              ? (lang === 'de' ? '✓ Kette vollständig — keine Manipulation festgestellt' : '✓ Chain intact — no tampering detected')
+              : (lang === 'de' ? '⚠ Manipulation festgestellt!' : '⚠ Tampering detected!')}
+          </p>
+          <p className="text-slate-600 mt-1">
+            {lang === 'de' ? 'Einträge gesamt:' : 'Total entries:'} {result.totalEntries}
+            {result.legacyEntries > 0 && <> · {lang === 'de' ? 'Legacy (vor Hashing):' : 'Legacy (pre-hashing):'} {result.legacyEntries}</>}
+          </p>
+          {result.tamperedIds.length > 0 && (
+            <p className="text-red-700 mt-1 font-mono text-xs">
+              {lang === 'de' ? 'Betroffene Eintrags-IDs:' : 'Affected entry IDs:'} {result.tamperedIds.join(', ')}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main AdminPanel ───────────────────────────────────────────────────────────
 export default function AdminPanel({ adminName, adminUserId }: { adminName: string; adminUserId: string }) {
   const [tab, setTab] = useState<Tab>('dashboard')
@@ -1615,7 +1669,7 @@ export default function AdminPanel({ adminName, adminUserId }: { adminName: stri
         {tab === 'import'    && <ImportTab lang={lang} />}
         {tab === 'usage'     && <UsageTab lang={lang} siteFilter={siteFilter} />}
         {tab === 'verlauf'   && <VerlaufTab lang={lang} siteFilter={siteFilter} />}
-        {tab === 'sessions'  && <SessionsTab lang={lang} adminUserId={adminUserId} />}
+        {tab === 'sessions'  && <><SessionsTab lang={lang} adminUserId={adminUserId} /><AuditIntegrityPanel lang={lang} /></>}
       </main>
     </div>
   )

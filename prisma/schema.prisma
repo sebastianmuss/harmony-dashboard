@@ -218,11 +218,13 @@ model AuditLog {
   timestamp  DateTime @default(now())
   actorType  String   // 'admin' | 'provider' | 'patient' | 'system'
   actorId    Int?     // providerId or patientId
-  action     String   // 'create' | 'update' | 'delete'
+  action     String   // 'create' | 'update' | 'delete' | 'view' | 'export' | 'import' | 'failed_login'
   resource   String   // 'patient' | 'provider' | 'prom' | 'clinical' | 'config'
   resourceId Int?
   changes    Json?    // { field: { before, after } } — never includes PINs/passwords
   ip         String?
+  hash       String?  // SHA-256 of this entry's content — used for tamper detection
+  prevHash   String?  // hash of the immediately preceding AuditLog row (null / GENESIS for first)
 
   @@index([resource, resourceId])
   @@index([actorId])
