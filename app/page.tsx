@@ -138,7 +138,6 @@ export default async function RootPage() {
       <footer className="border-t border-slate-200 bg-white/60 mt-auto py-5 px-8">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400">
           <span>© 2026 Sebastian Mussnig · Medical University of Vienna, Division of Nephrology and Dialysis</span>
-          <span>Data hosted within the EU · GDPR compliant</span>
         </div>
       </footer>
 
