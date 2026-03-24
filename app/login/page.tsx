@@ -275,7 +275,6 @@ export default function LoginPage() {
         )}
       </div>
 
-      <p className="text-blue-300 text-sm mt-8">HARMONY Study · © {new Date().getFullYear()} · Medical Data – Confidential</p>
     </div>
   )
 }
