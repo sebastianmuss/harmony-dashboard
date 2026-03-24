@@ -175,6 +175,6 @@ Long-gap sessions (MWF Monday, TThS Tuesday — two days since last dialysis) ar
 
 ## License
 
-Copyright © 2026 Medical University of Vienna. Developed by Sebastian Mussnig. All rights reserved.
+Copyright © 2026 Medical University of Vienna. All rights reserved.
 
 This software was developed for the HARMONY feasibility study. It may not be copied, distributed, or used for commercial purposes without explicit written permission from the principal investigator.

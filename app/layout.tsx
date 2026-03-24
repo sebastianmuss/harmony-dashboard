@@ -13,10 +13,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="de">
-      <body>
+      <body className="flex flex-col min-h-screen">
         <SessionProvider session={session}>
-          {children}
+          <div className="flex-1">{children}</div>
         </SessionProvider>
+        <footer className="border-t border-slate-200 bg-white/60 py-4 px-8 text-center text-xs text-slate-400">
+          © 2026 Medical University of Vienna
+        </footer>
       </body>
     </html>
   )
