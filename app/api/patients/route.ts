@@ -9,7 +9,7 @@ import logger from '@/lib/logger'
 
 const CreatePatientSchema = z.object({
   patientCode:        z.string().min(1).max(20).toUpperCase(),
-  pin:                z.string().refine((p) => !pinError(p), (p) => ({ message: pinError(p) ?? 'Invalid PIN' })),
+  pin:                z.string().superRefine((p, ctx) => { const err = pinError(p); if (err) ctx.addIssue({ code: z.ZodIssueCode.custom, message: err }) }),
   shiftId:            z.int().positive(),
   enrollmentDate:     z.string().date(),
   center:             z.string().min(1).optional(),
