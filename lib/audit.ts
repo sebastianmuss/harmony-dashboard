@@ -5,6 +5,19 @@ import { prisma } from '@/lib/db'
 // Sentinel value used as prevHash for the very first audit entry.
 const GENESIS = '0'.repeat(64)
 
+/**
+ * Deterministic JSON serialization with alphabetically sorted keys.
+ * Required because PostgreSQL's jsonb type reorders keys alphabetically,
+ * so reading back a stored object produces different key order than the
+ * original. Using sorted keys in the hash ensures write and verify agree.
+ */
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']'
+  const obj = value as Record<string, unknown>
+  return '{' + Object.keys(obj).sort().map((k) => JSON.stringify(k) + ':' + stableStringify(obj[k])).join(',') + '}'
+}
+
 export interface AuditEntry {
   actorType: string
   actorId?: number | null
@@ -66,7 +79,7 @@ export function writeAudit(entry: AuditEntry): void {
         })
         const prevHash = last?.hash ?? GENESIS
         const now = new Date()
-        const changesJSON = entry.changes ? JSON.stringify(entry.changes) : ''
+        const changesJSON = entry.changes ? stableStringify(entry.changes) : ''
         const hash = computeHash({
           timestamp: now,
           actorType: entry.actorType,
@@ -145,7 +158,7 @@ export async function verifyAuditChain(): Promise<{
     }
 
     // Recompute and verify hash
-    const changesJSON = entry.changes ? JSON.stringify(entry.changes as Record<string, unknown>) : ''
+    const changesJSON = entry.changes ? stableStringify(entry.changes) : ''
     const expected = computeHash({
       timestamp:  entry.timestamp,
       actorType:  entry.actorType,
