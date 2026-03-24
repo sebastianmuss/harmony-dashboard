@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { writeAudit, getIp } from '@/lib/audit'
 
+
 // POST /api/patients/[id]/override
 // Creates a one-time "treat as on HD today" override for a patient.
 // Providers can only override patients in their own center.
@@ -48,6 +49,16 @@ export async function POST(
     where: { patientId_date: { patientId, date } },
     update: {},
     create: { patientId, date },
+  })
+
+  writeAudit({
+    actorType: session.user.role,
+    actorId: session.user.providerId ?? null,
+    action: 'create',
+    resource: 'schedule_override',
+    resourceId: patientId,
+    changes: { patientId, date: dateStr },
+    ip: getIp(req),
   })
 
   return NextResponse.json({ success: true })

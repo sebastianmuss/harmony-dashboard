@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
         p._count.promResponses,
         lastLogin,
         lastProm,
-      ].join(',')
+      ].map(csvCell).join(',')
     }).join('\n')
 
     return new NextResponse(header + csv, {
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
       const lastLogin = logins.length ? logins[logins.length - 1].createdAt.toISOString() : ''
       const lastView  = views.length  ? views[views.length - 1].createdAt.toISOString()   : ''
       return [
-        `"${p.name}"`,
+        p.name,
         p.center ?? '',
         p.role,
         p.isActive ? 'yes' : 'no',
@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
         proms.length,
         lastLogin,
         lastView,
-      ].join(',')
+      ].map(csvCell).join(',')
     }).join('\n')
 
     return new NextResponse(header + csv, {
@@ -95,4 +95,8 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ error: 'Invalid type — use patients or providers' }, { status: 400 })
+}
+
+function csvCell(value: unknown): string {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`
 }
