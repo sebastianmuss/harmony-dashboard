@@ -30,8 +30,3 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Documentation — kept local until ready for public release
-README.md
-SECURITY.md
-CONTRIBUTING.md
-CHANGELOG.md
