@@ -30,3 +30,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Private — seed script contains demo credentials, kept outside the repo
+scripts/seed.ts
+
