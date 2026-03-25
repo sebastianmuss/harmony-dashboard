@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
-import { pinIndexHash, pinError } from '@/lib/pin'
+import { isPasswordValid } from '@/lib/password'
 import { writeAudit, getIp } from '@/lib/audit'
 import { z } from 'zod'
 import logger from '@/lib/logger'
 
 const CreatePatientSchema = z.object({
   patientCode:        z.string().min(1).max(20).toUpperCase(),
-  pin:                z.string().superRefine((p, ctx) => { const err = pinError(p); if (err) ctx.addIssue({ code: z.ZodIssueCode.custom, message: err }) }),
+  pin:                z.string().superRefine((p, ctx) => { if (!isPasswordValid(p)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Password must be at least 12 characters and include upper, lower, digit, and special character.' }) }),
   shiftId:            z.int().positive(),
   enrollmentDate:     z.string().date(),
   center:             z.string().min(1).optional(),
@@ -69,16 +69,12 @@ export async function POST(req: NextRequest) {
   }
   const { patientCode, pin, shiftId, enrollmentDate, center, dialysisSchedule, customDialysisDays, notes } = parsed.data
 
-  const [pinHash, indexHash] = await Promise.all([
-    bcrypt.hash(pin, 12),
-    Promise.resolve(pinIndexHash(pin)),
-  ])
+  const pinHash = await bcrypt.hash(pin, 12)
 
   const patient = await prisma.patient.create({
     data: {
       patientCode,
       pin: pinHash,
-      pinIndexHash: indexHash,
       shiftId,
       center: center ?? 'Feldbach',
       dialysisSchedule: dialysisSchedule ?? 'MWF',

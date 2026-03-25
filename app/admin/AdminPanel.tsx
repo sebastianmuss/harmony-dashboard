@@ -213,7 +213,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   const [showAdd, setShowAdd] = useState(false)
   const [editPatient, setEditPatient] = useState<Patient | null>(null)
   const [form, setForm] = useState({
-    patientCode: '', pin: '', shiftId: '', center: 'Feldbach',
+    patientCode: '', pin: '', confirmPin: '', shiftId: '', center: 'Feldbach',
     dialysisSchedule: 'MWF', customDialysisDays: '',
     enrollmentDate: '', dryWeight: '', notes: '',
   })
@@ -232,7 +232,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   useEffect(() => { loadPatients() }, [loadPatients])
 
   function openAdd() {
-    setForm({ patientCode: '', pin: '', shiftId: shifts[0]?.id.toString() ?? '', center: 'Feldbach', dialysisSchedule: 'MWF', customDialysisDays: '', enrollmentDate: new Date().toISOString().slice(0, 10), dryWeight: '', notes: '' })
+    setForm({ patientCode: '', pin: '', confirmPin: '', shiftId: shifts[0]?.id.toString() ?? '', center: 'Feldbach', dialysisSchedule: 'MWF', customDialysisDays: '', enrollmentDate: new Date().toISOString().slice(0, 10), dryWeight: '', notes: '' })
     setEditPatient(null)
     setShowAdd(true)
     setError(null)
@@ -241,7 +241,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   function openEdit(patient: Patient) {
     setForm({
       patientCode: patient.patientCode,
-      pin: '',
+      pin: '', confirmPin: '',
       shiftId: patient.shiftId.toString(),
       center: patient.center,
       dialysisSchedule: patient.dialysisSchedule,
@@ -264,6 +264,11 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   async function savePatient() {
     setSaving(true)
     setError(null)
+    const needsPwCheck = !editPatient || form.pin.length > 0
+    if (needsPwCheck) {
+      if (!editPatient && form.pin.length === 0) { setError(lang === 'de' ? 'Bitte ein Passwort eingeben' : 'Please enter a password'); setSaving(false); return }
+      if (form.pin !== form.confirmPin) { setError(lang === 'de' ? 'Passwörter stimmen nicht überein' : 'Passwords do not match'); setSaving(false); return }
+    }
     try {
       const schedulePayload = {
         dialysisSchedule: form.dialysisSchedule,
@@ -417,16 +422,42 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
             <div>
               <label className="block text-sm font-semibold text-slate-600 mb-1">
                 {editPatient
-                  ? (lang === 'de' ? 'Neue PIN (leer lassen = unverändert)' : 'New PIN (leave blank to keep)')
-                  : (lang === 'de' ? 'PIN (6 Stellen) *' : 'PIN (6 digits) *')}
+                  ? (lang === 'de' ? 'Neues Passwort (leer lassen = unverändert)' : 'New Password (leave blank to keep)')
+                  : (lang === 'de' ? 'Passwort *' : 'Password *')}
               </label>
               <input
-                type="text" inputMode="numeric" pattern="\d{6}" maxLength={6}
-                value={form.pin} onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '') }))}
+                type="password"
+                value={form.pin} onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-                placeholder={lang === 'de' ? 'z.B. 123456' : 'e.g. 123456'}
+                placeholder="••••••••••••"
               />
+              {form.pin.length > 0 && (() => {
+                const checks = checkPassword(form.pin)
+                const rules = lang === 'de' ? PASSWORD_RULES_DE : PASSWORD_RULES_EN
+                return (
+                  <ul className="mt-1.5 space-y-0.5">
+                    {rules.map((r) => (
+                      <li key={r.key} className={clsx('text-xs flex items-center gap-1', checks[r.key] ? 'text-green-600' : 'text-slate-400')}>
+                        <span>{checks[r.key] ? '✓' : '○'}</span>{r.label}
+                      </li>
+                    ))}
+                  </ul>
+                )
+              })()}
             </div>
+            {(!editPatient || form.pin.length > 0) && (
+              <div>
+                <label className="block text-sm font-semibold text-slate-600 mb-1">
+                  {lang === 'de' ? 'Passwort bestätigen *' : 'Confirm Password *'}
+                </label>
+                <input
+                  type="password"
+                  value={form.confirmPin} onChange={(e) => setForm((f) => ({ ...f, confirmPin: e.target.value }))}
+                  className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                  placeholder="••••••••••••"
+                />
+              </div>
+            )}
             <div>
               <label className="block text-sm font-semibold text-slate-600 mb-1">
                 {lang === 'de' ? 'Zentrum *' : 'Center *'}

@@ -98,8 +98,8 @@ model Shift {
 model Patient {
   id                  Int       @id @default(autoincrement())
   patientCode         String    @unique  // HMY-XXXX pseudonymous identifier
-  pin                 String    @unique  // 6-digit PIN, stored as bcrypt hash
-  pinIndexHash        String    @unique  // HMAC-SHA256(pin) — used for O(1) login lookup
+  pin                 String    @unique  // patient password, stored as bcrypt hash
+  pinIndexHash        String?   @unique  // legacy field — no longer used
   shiftId             Int
   center              String    @default("Feldbach")  // "Feldbach" | "Vienna"
   dialysisSchedule    String    @default("MWF")       // "MWF" | "TThS" | "custom"

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
-import { pinIndexHash, pinError } from '@/lib/pin'
+import { isPasswordValid } from '@/lib/password'
 import { writeAudit, getIp } from '@/lib/audit'
 
 // ── PATCH /api/patients/[id] ──────────────────────────────────────────────────
@@ -28,12 +28,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.notes !== undefined) update.notes = body.notes
   if (body.dryWeight !== undefined) update.dryWeight = body.dryWeight ? parseFloat(body.dryWeight) : null
   if (body.pin !== undefined) {
-    const pinErr = pinError(body.pin)
-    if (pinErr) {
-      return NextResponse.json({ error: pinErr }, { status: 400 })
+    if (!isPasswordValid(body.pin)) {
+      return NextResponse.json({ error: 'Password must be at least 12 characters and include upper, lower, digit, and special character.' }, { status: 400 })
     }
     update.pin = await bcrypt.hash(body.pin, 12)
-    update.pinIndexHash = pinIndexHash(body.pin)
   }
 
   const patient = await prisma.patient.update({

@@ -2,9 +2,7 @@ import NextAuth from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import { PrismaAdapter } from '@auth/prisma-adapter'
 import bcrypt from 'bcryptjs'
-import { timingSafeEqual } from 'crypto'
 import { prisma } from '@/lib/db'
-import { pinIndexHash, validatePin } from '@/lib/pin'
 import logger from '@/lib/logger'
 import { writeAudit } from '@/lib/audit'
 
@@ -127,34 +125,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
 
-    // ── Patient login (patientCode + PIN) ─────────────────────────────────
+    // ── Patient login (patientCode + password) ────────────────────────────
     Credentials({
       id: 'patient-login',
       credentials: {
         patientCode: { label: 'Patientenkennung', type: 'text' },
-        pin:         { label: 'PIN', type: 'password' },
+        password:    { label: 'Passwort', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.pin || !credentials?.patientCode) return null
-        const pin = (credentials.pin as string).trim()
-        if (!validatePin(pin)) return null
+        if (!credentials?.password || !credentials?.patientCode) return null
+        const inputCode = (credentials.patientCode as string).trim().toUpperCase()
+        const password = (credentials.password as string)
 
-        const indexHash = pinIndexHash(pin)
         const patient = await prisma.patient.findUnique({
-          where: { pinIndexHash: indexHash, isActive: true },
+          where: { patientCode: inputCode, isActive: true },
           include: { shift: true },
         })
-        if (!patient) return null
 
-        const inputCode = (credentials.patientCode as string).trim().toUpperCase()
-        const expectedCode = patient.patientCode.toUpperCase()
-        // Constant-time comparison to prevent timing attacks that enumerate valid codes
-        const codeMatch =
-          inputCode.length === expectedCode.length &&
-          timingSafeEqual(Buffer.from(inputCode), Buffer.from(expectedCode))
-
-        const valid = await bcrypt.compare(pin, patient.pin)
-        if (!codeMatch || !valid) {
+        const valid = patient ? await bcrypt.compare(password, patient.pin) : false
+        if (!patient || !valid) {
           logger.warn({ patientCode: inputCode }, 'Failed patient login attempt')
           writeAudit({ actorType: 'patient', actorId: null, action: 'failed_login', resource: 'auth', resourceId: null, changes: { patientCode: inputCode }, ip: null })
           return null

@@ -2,24 +2,19 @@
 import { useState, useEffect } from 'react'
 import { signIn, useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import clsx from 'clsx'
 
-type LoginMode = 'pin' | 'provider'
+type LoginMode = 'patient' | 'provider'
 
 export default function LoginPage() {
   const router = useRouter()
   const { data: session, status } = useSession()
-  const [mode, setMode] = useState<LoginMode>('pin')
-  const [pin, setPin] = useState('')
+  const [mode, setMode] = useState<LoginMode>('patient')
   const [patientCode, setPatientCode] = useState('')
-  const [isTouchDevice, setIsTouchDevice] = useState(true) // default true avoids numpad→input flash
-  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [username, setUsername] = useState('')
+  const [providerPassword, setProviderPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  useEffect(() => {
-    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
-  }, [])
 
   useEffect(() => {
     if (status === 'authenticated' && session) {
@@ -30,46 +25,26 @@ export default function LoginPage() {
     }
   }, [session, status, router])
 
-  // Keyboard capture for numpad (touch devices only — desktop uses a text input directly)
-  useEffect(() => {
-    if (mode !== 'pin' || !isTouchDevice) return
-    function handleKey(e: KeyboardEvent) {
-      if (document.activeElement?.tagName === 'INPUT') return
-      if (e.key >= '0' && e.key <= '9') setPin((p) => p.length < 6 ? p + e.key : p)
-      else if (e.key === 'Backspace') setPin((p) => p.slice(0, -1))
-      else if (e.key === 'Delete') setPin('')
-    }
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [mode, isTouchDevice])
-
-  // PIN pad handler
-  function appendPin(digit: string) {
-    if (pin.length < 6) setPin((p) => p + digit)
-  }
-  function clearPin() { setPin('') }
-  function backspacePin() { setPin((p) => p.slice(0, -1)) }
-
-  async function submitPin(e: React.FormEvent<HTMLFormElement>) {
+  async function submitPatient(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!patientCode.trim()) { setError('Bitte geben Sie Ihre Patientenkennung ein.'); return }
-    if (pin.length < 6) { setError('Bitte geben Sie Ihre vollständige 6-stellige PIN ein.'); return }
+    if (!password) { setError('Bitte geben Sie Ihr Passwort ein.'); return }
     setError(null)
     setLoading(true)
-    const result = await signIn('patient-login', { patientCode: patientCode.trim().toUpperCase(), pin, redirect: false })
+    const result = await signIn('patient-login', { patientCode: patientCode.trim().toUpperCase(), password, redirect: false })
     setLoading(false)
     if (result?.error) {
-      setError('Patientenkennung oder PIN nicht erkannt. Bitte wenden Sie sich an das Pflegepersonal.')
-      setPin('')
+      setError('Patientenkennung oder Passwort nicht erkannt. Bitte wenden Sie sich an das Pflegepersonal.')
+      setPassword('')
     }
   }
 
   async function submitProvider(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!username || !password) { setError('Please enter username and password.'); return }
+    if (!username || !providerPassword) { setError('Please enter username and password.'); return }
     setError(null)
     setLoading(true)
-    const result = await signIn('provider-login', { username, password, redirect: false })
+    const result = await signIn('provider-login', { username, password: providerPassword, redirect: false })
     setLoading(false)
     if (result?.error) {
       setError('Invalid username or password.')
@@ -102,24 +77,14 @@ export default function LoginPage() {
       {/* Mode Toggle */}
       <div className="flex gap-2 mb-6">
         <button
-          onClick={() => { setMode('pin'); setError(null) }}
-          className={clsx(
-            'px-6 py-3 rounded-xl text-lg font-semibold transition-all',
-            mode === 'pin'
-              ? 'bg-white text-blue-900 shadow-lg'
-              : 'bg-blue-800 text-blue-200 hover:bg-blue-700'
-          )}
+          onClick={() => { setMode('patient'); setError(null) }}
+          className={`px-6 py-3 rounded-xl text-lg font-semibold transition-all ${mode === 'patient' ? 'bg-white text-blue-900 shadow-lg' : 'bg-blue-800 text-blue-200 hover:bg-blue-700'}`}
         >
-          Patient (PIN)
+          Patient
         </button>
         <button
           onClick={() => { setMode('provider'); setError(null) }}
-          className={clsx(
-            'px-6 py-3 rounded-xl text-lg font-semibold transition-all',
-            mode === 'provider'
-              ? 'bg-white text-blue-900 shadow-lg'
-              : 'bg-blue-800 text-blue-200 hover:bg-blue-700'
-          )}
+          className={`px-6 py-3 rounded-xl text-lg font-semibold transition-all ${mode === 'provider' ? 'bg-white text-blue-900 shadow-lg' : 'bg-blue-800 text-blue-200 hover:bg-blue-700'}`}
         >
           Personal / Admin
         </button>
@@ -127,20 +92,19 @@ export default function LoginPage() {
 
       <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-8">
 
-        {/* ── Patient PIN Login ────────────────────────────────────── */}
-        {mode === 'pin' && (
-          <form onSubmit={submitPin} className="space-y-6">
+        {/* ── Patient Login ────────────────────────────────────────── */}
+        {mode === 'patient' && (
+          <form onSubmit={submitPatient} className="space-y-5">
             <div className="text-center">
               <h2 className="text-3xl font-bold text-slate-800">Willkommen</h2>
-              <p className="text-slate-500 mt-1">Kennung und PIN eingeben</p>
+              <p className="text-slate-500 mt-1">Kennung und Passwort eingeben</p>
             </div>
 
-            {/* Patient code input */}
             <div>
               <label className="block text-sm font-semibold text-slate-600 mb-1">Patientenkennung</label>
               <input
                 type="text"
-                autoComplete="off"
+                autoComplete="username"
                 value={patientCode}
                 onChange={(e) => setPatientCode(e.target.value.toUpperCase())}
                 className="w-full border-2 border-slate-300 rounded-xl px-4 py-3 text-lg font-mono tracking-widest focus:outline-none focus:border-blue-500 transition"
@@ -149,84 +113,24 @@ export default function LoginPage() {
               />
             </div>
 
-            {isTouchDevice ? (
-              <>
-                {/* PIN dot display (touch) */}
-                <div className="flex justify-center gap-3">
-                  {[0,1,2,3,4,5].map((i) => (
-                    <div
-                      key={i}
-                      className={clsx(
-                        'w-10 h-12 rounded-lg border-2 flex items-center justify-center text-2xl font-bold',
-                        i < pin.length ? 'border-blue-600 bg-blue-50 text-blue-800' : 'border-slate-300 bg-slate-50 text-transparent'
-                      )}
-                    >
-                      {i < pin.length ? '●' : '○'}
-                    </div>
-                  ))}
-                </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-600 mb-1">Passwort</label>
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full border-2 border-slate-300 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-blue-500 transition"
+                placeholder="••••••••••••"
+              />
+            </div>
 
-                {/* Numpad (touch) */}
-                <div className="grid grid-cols-3 gap-3">
-                  {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((key, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      disabled={key === ''}
-                      onClick={() => {
-                        if (key === '⌫') backspacePin()
-                        else if (key !== '') appendPin(key)
-                      }}
-                      className={clsx(
-                        'h-16 rounded-2xl text-2xl font-bold transition-all active:scale-95',
-                        key === '' ? 'invisible'
-                          : key === '⌫' ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                          : 'bg-blue-100 text-blue-900 hover:bg-blue-200 active:bg-blue-300'
-                      )}
-                    >
-                      {key}
-                    </button>
-                  ))}
-                </div>
+            {error && <p className="text-red-600 text-center font-semibold bg-red-50 rounded-xl p-3">{error}</p>}
 
-                {error && <p className="text-red-600 text-center font-semibold bg-red-50 rounded-xl p-3">{error}</p>}
-
-                <div className="flex gap-3">
-                  <button type="button" onClick={clearPin}
-                    className="flex-1 h-14 rounded-2xl bg-slate-200 text-slate-700 text-xl font-bold hover:bg-slate-300 transition-all">
-                    Löschen
-                  </button>
-                  <button type="submit" disabled={!patientCode.trim() || pin.length < 6 || loading}
-                    className="flex-[2] h-14 rounded-2xl bg-blue-700 text-white text-xl font-bold hover:bg-blue-800 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                    {loading ? 'Anmeldung…' : 'Anmelden'}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* PIN text input (desktop) */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1">PIN</label>
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    autoComplete="current-password"
-                    maxLength={6}
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    className="w-full border-2 border-slate-300 rounded-xl px-4 py-3 text-lg tracking-widest focus:outline-none focus:border-blue-500 transition"
-                    placeholder="······"
-                  />
-                </div>
-
-                {error && <p className="text-red-600 text-center font-semibold bg-red-50 rounded-xl p-3">{error}</p>}
-
-                <button type="submit" disabled={!patientCode.trim() || pin.length < 6 || loading}
-                  className="w-full h-14 rounded-2xl bg-blue-700 text-white text-xl font-bold hover:bg-blue-800 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                  {loading ? 'Anmeldung…' : 'Anmelden'}
-                </button>
-              </>
-            )}
+            <button type="submit" disabled={!patientCode.trim() || !password || loading}
+              className="w-full h-14 rounded-2xl bg-blue-700 text-white text-xl font-bold hover:bg-blue-800 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+              {loading ? 'Anmeldung…' : 'Anmelden'}
+            </button>
           </form>
         )}
 
@@ -255,8 +159,8 @@ export default function LoginPage() {
               <input
                 type="password"
                 autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                value={providerPassword}
+                onChange={(e) => setProviderPassword(e.target.value)}
                 className="w-full border-2 border-slate-300 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-blue-500 transition"
                 placeholder="••••••••"
               />

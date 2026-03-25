@@ -858,7 +858,7 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
   const [data, setData] = useState<ShiftData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'all' | 'submitted' | 'pending_hd'>('all')
+  const [filter, setFilter] = useState<'all' | 'submitted' | 'pending_hd'>('pending_hd')
   const [lang, setLang] = useState<Lang>('de')
   const [view, setView] = useState<'patients' | 'verlauf'>('patients')
 
@@ -942,7 +942,7 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
               </div>
               <div className="ml-auto">
                 <p className="text-slate-500 text-xs font-semibold uppercase">{lang === 'de' ? 'Eingaben heute' : 'Submitted today'}</p>
-                <p className={clsx('text-2xl font-black', submittedCount === totalCount ? 'text-green-600' : 'text-orange-500')}>
+                <p className="text-2xl font-black text-slate-700">
                   {submittedCount} / {totalCount}
                 </p>
               </div>
