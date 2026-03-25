@@ -219,7 +219,7 @@ const PROM_QUESTIONS = {
   de: [
     { key: 'fluidStatusScore' as const, label: 'Wie fühlen Sie sich heute?', sub: 'Allgemeines Wohlbefinden / Wasserhaushalt (1 = ausgezeichnet)' },
     { key: 'thirstScore' as const, label: 'Wie stark ist Ihr Durstgefühl?', sub: '1 = kein Durst · 5 = extremer Durst' },
-    { key: 'fluidOverloadScore' as const, label: 'Fühlen Sie sich aufgeschwemmt?', sub: '1 = gar nicht · 5 = sehr stark' },
+    { key: 'fluidOverloadScore' as const, label: 'Fühlen Sie sich überwässert?', sub: '1 = gar nicht · 5 = sehr stark' },
   ],
 }
 

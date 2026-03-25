@@ -83,7 +83,7 @@ const T = {
     patientTP:     'Heute: Ankunft',
     q1l: 'Wie fühlen Sie sich heute?',        q1s: 'Allgemeines Wohlbefinden',
     q2l: 'Wie stark ist Ihr Durstgefühl?',    q2s: '1 = kein Durst · 5 = extremer Durst',
-    q3l: 'Fühlen Sie sich aufgeschwemmt?',    q3s: '1 = gar nicht · 5 = sehr stark',
+    q3l: 'Fühlen Sie sich überwässert?',       q3s: '1 = gar nicht · 5 = sehr stark',
     recLabel: '⏱️ Erholungszeit nach Dialyse',
     recSub:   'Zeit bis zur Erholung nach der letzten Sitzung',
     recOpts:  ['0–2 Std.', '3–6 Std.', '7–12 Std.', '>12 Std.'],
