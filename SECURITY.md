@@ -61,7 +61,7 @@ You will receive an acknowledgement within 48 hours and a resolution timeline wi
 
 ### Infrastructure
 
-- Application data is hosted on a dedicated server within the EU (Hetzner, Germany)
+- Application data is hosted on a dedicated server within the EU
 - The Next.js process runs unprivileged on port 3000 behind Caddy on port 443
 - Environment variables (database credentials, JWT secret) are stored outside the repository in `.env.local`
 

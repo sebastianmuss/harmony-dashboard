@@ -103,7 +103,7 @@ Every route that modifies data must call `writeAudit()`. The `changes` field mus
 
 ## Deployment
 
-The production server runs on Hetzner. Deployment is manual:
+Deployment is manual:
 
 ```bash
 # On the production server

@@ -6,7 +6,7 @@ type Lang = 'en' | 'de'
 
 const T = {
   en: {
-    trial:        'Feasibility Trial · Division of Nephrology and Dialysis',
+    trial:        'Feasibility Trial',
     subtitle:     'A shared decision-making dashboard for fluid management in haemodialysis.',
     tagline:      'A transnational feasibility trial (Austria, Ireland, Scotland) integrating routinely collected dialysis data with patient-reported symptoms to enable patient-centred fluid management decisions.',
     signin:       'Sign in to the dashboard',
@@ -52,7 +52,7 @@ const T = {
     sessions:   'sessions',
   },
   de: {
-    trial:        'Machbarkeitsstudie · Abteilung für Nephrologie und Dialyse',
+    trial:        'Machbarkeitsstudie',
     subtitle:     'Ein Shared-Decision-Making-Dashboard für das Flüssigkeitsmanagement in der Hämodialyse.',
     tagline:      'Eine transnationale Machbarkeitsstudie (Österreich, Irland, Schottland), die routinemäßig erhobene Dialysedaten mit patientenberichteten Symptomen verbindet, um patientenzentrierte Entscheidungen im Flüssigkeitsmanagement zu ermöglichen.',
     signin:       'Zum Dashboard anmelden',
@@ -209,7 +209,7 @@ export default function HomeContent() {
           <div className="rounded-2xl border border-slate-200 shadow-md overflow-hidden bg-white">
             <div className="bg-slate-100 border-b border-slate-200 px-4 py-2 flex items-center gap-2">
               <div className="flex gap-1.5"><div className="w-3 h-3 rounded-full bg-slate-300"/><div className="w-3 h-3 rounded-full bg-slate-300"/><div className="w-3 h-3 rounded-full bg-slate-300"/></div>
-              <div className="flex-1 bg-white rounded-md px-3 py-1 text-xs text-slate-400 mx-2 border border-slate-200">harmony-app.at/patient</div>
+              <div className="flex-1 bg-white rounded-md px-3 py-1 text-xs text-slate-400 mx-2 border border-slate-200">harmony.study/patient</div>
             </div>
             <div className="bg-slate-50 p-4">
               <div className="flex items-center justify-between mb-4">
@@ -251,7 +251,7 @@ export default function HomeContent() {
           <div className="rounded-2xl border border-slate-200 shadow-md overflow-hidden bg-white">
             <div className="bg-slate-100 border-b border-slate-200 px-4 py-2 flex items-center gap-2">
               <div className="flex gap-1.5"><div className="w-3 h-3 rounded-full bg-slate-300"/><div className="w-3 h-3 rounded-full bg-slate-300"/><div className="w-3 h-3 rounded-full bg-slate-300"/></div>
-              <div className="flex-1 bg-white rounded-md px-3 py-1 text-xs text-slate-400 mx-2 border border-slate-200">harmony-app.at/provider</div>
+              <div className="flex-1 bg-white rounded-md px-3 py-1 text-xs text-slate-400 mx-2 border border-slate-200">harmony.study/provider</div>
             </div>
             <div className="bg-slate-50 p-4">
               <div className="flex items-center justify-between mb-3">

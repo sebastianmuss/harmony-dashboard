@@ -25,7 +25,7 @@ All data are stored in pseudonymised form. Patients are identified only by a stu
 | Validation | Zod v4 |
 | Logging | Pino (structured JSON) |
 | Reverse proxy | Caddy (TLS, security headers) |
-| Hosting | Hetzner Cloud (EU) |
+| Hosting | Dedicated server (EU) |
 
 ---
 
@@ -83,7 +83,7 @@ Next.js (port 3000)
 - Per-patient access logging (Art. 32 — appropriate technical measures)
 - Soft-delete only — patient records are deactivated, not destroyed, preserving audit integrity
 - Export restricted to admin role; every export is logged
-- Data hosted within the EU (Hetzner, Germany)
+- Data hosted within the EU
 - Session lifetime limited to 2 hours
 
 ---
@@ -126,7 +126,7 @@ Open [http://localhost:3000](http://localhost:3000).
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `NEXTAUTH_SECRET` | Random secret ≥ 32 chars — used for JWT signing and PIN HMAC |
-| `NEXTAUTH_URL` | Public base URL of the app (e.g. `https://harmony-app.at`) |
+| `NEXTAUTH_URL` | Public base URL of the app (e.g. `https://your-domain.example`) |
 
 ---
 
