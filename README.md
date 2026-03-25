@@ -1,12 +1,12 @@
 # HARMONY Dashboard
 
-Clinical research web application for the HARMONY feasibility study — a 12-week investigation of fluid management in hemodialysis patients at an Austrian dialysis centre.
+Clinical research web application for the HARMONY feasibility study — a 12-week investigation of fluid management in hemodialysis patients.
 
 ## Overview
 
 The HARMONY Dashboard supports three user groups across the study:
 
-- **Patients** log patient-reported outcome measures (PROMs) at each dialysis session via a large-touch PIN-authenticated interface in German.
+- **Patients** log patient-reported outcome measures (PROMs) and view data at each dialysis session via a password-protected interface.
 - **Providers** (nursing staff / physicians) view their shift's patient list, enter clinical measurements, and support PROM data entry on behalf of patients.
 - **Admins** (principal investigator / study coordinator) manage patients and providers, configure the study, monitor feasibility metrics, and export research data.
 
