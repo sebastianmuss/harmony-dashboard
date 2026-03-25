@@ -124,7 +124,9 @@ export default function HomeContent() {
       <header className="px-8 py-5 flex items-center justify-between max-w-5xl mx-auto w-full">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">H</span>
+            <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C12 2 4 10.5 4 15a8 8 0 0016 0c0-4.5-8-13-8-13z"/>
+            </svg>
           </div>
           <span className="font-semibold text-slate-700 text-lg">HARMONY</span>
         </div>
