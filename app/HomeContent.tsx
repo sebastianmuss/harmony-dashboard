@@ -125,7 +125,7 @@ export default function HomeContent() {
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
             <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C12 2 4 10.5 4 15a8 8 0 0016 0c0-4.5-8-13-8-13z"/>
+              <path d="M12 2c-5.33 8.55-8 13.8-8 17a8 8 0 0 0 16 0c0-3.2-2.67-8.45-8-17z"/>
             </svg>
           </div>
           <span className="font-semibold text-slate-700 text-lg">HARMONY</span>
