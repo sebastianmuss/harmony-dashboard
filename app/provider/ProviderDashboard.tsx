@@ -35,6 +35,7 @@ interface ClinicalEntry {
 interface PatientData {
   id: number
   patientCode: string
+  name: string | null
   center: string
   shiftName: string
   schedule: string
@@ -711,7 +712,10 @@ function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, o
         <div className={clsx('w-3 h-3 rounded-full flex-shrink-0 mt-1.5', dotColor)} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="font-mono font-bold text-blue-700 truncate flex-1">{patient.patientCode}</p>
+            <div className="flex-1 min-w-0">
+              {patient.name && <p className="text-sm font-semibold text-slate-800 truncate">{patient.name}</p>}
+              <p className="font-mono text-xs text-blue-700 truncate">{patient.patientCode}</p>
+            </div>
             {patient.submittedToday && patient.todayProm && (
               <div className="flex gap-1 flex-shrink-0">
                 <ScoreBadge score={patient.todayProm.fluidStatusScore} />

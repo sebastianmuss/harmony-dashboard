@@ -98,6 +98,7 @@ model Shift {
 model Patient {
   id                  Int       @id @default(autoincrement())
   patientCode         String    @unique  // HMY-XXXX pseudonymous identifier
+  nameEncrypted       String?            // AES-256-GCM encrypted display name
   pin                 String    @unique  // patient password, stored as bcrypt hash
   pinIndexHash        String?   @unique  // legacy field — no longer used
   shiftId             Int

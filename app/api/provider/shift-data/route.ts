@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getCurrentStudyWeek, getTimepointForWeek, isLongGapSession, isDialysisDay } from '@/lib/study'
+import { decrypt } from '@/lib/crypto'
 
 // ── GET /api/provider/shift-data ──────────────────────────────────────────────
 // Returns today's shift patient list with PROM history + clinical data
@@ -104,6 +105,7 @@ export async function GET() {
     return {
       id: patient.id,
       patientCode: patient.patientCode,
+      name: patient.nameEncrypted ? decrypt(patient.nameEncrypted) : null,
       center: patient.center,
       shiftName: patient.shift.name,
       schedule: patient.dialysisSchedule,

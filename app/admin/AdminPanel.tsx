@@ -214,7 +214,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   const [editPatient, setEditPatient] = useState<Patient | null>(null)
   const [search, setSearch] = useState('')
   const [form, setForm] = useState({
-    patientCode: '', pin: '', confirmPin: '', shiftId: '', center: 'Feldbach',
+    patientCode: '', name: '', pin: '', confirmPin: '', shiftId: '', center: 'Feldbach',
     dialysisSchedule: 'MWF', customDialysisDays: '',
     enrollmentDate: '', dryWeight: '', notes: '',
   })
@@ -233,7 +233,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   useEffect(() => { loadPatients() }, [loadPatients])
 
   function openAdd() {
-    setForm({ patientCode: '', pin: '', confirmPin: '', shiftId: shifts[0]?.id.toString() ?? '', center: 'Feldbach', dialysisSchedule: 'MWF', customDialysisDays: '', enrollmentDate: new Date().toISOString().slice(0, 10), dryWeight: '', notes: '' })
+    setForm({ patientCode: '', name: '', pin: '', confirmPin: '', shiftId: shifts[0]?.id.toString() ?? '', center: 'Feldbach', dialysisSchedule: 'MWF', customDialysisDays: '', enrollmentDate: new Date().toISOString().slice(0, 10), dryWeight: '', notes: '' })
     setEditPatient(null)
     setShowAdd(true)
     setError(null)
@@ -242,6 +242,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   function openEdit(patient: Patient) {
     setForm({
       patientCode: patient.patientCode,
+      name: (patient as any).name ?? '',
       pin: '', confirmPin: '',
       shiftId: patient.shiftId.toString(),
       center: patient.center,
@@ -278,6 +279,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
       if (editPatient) {
         const body: Record<string, unknown> = {
           patientCode: form.patientCode.toUpperCase(),
+          name: form.name || null,
           shiftId: parseInt(form.shiftId),
           center: form.center,
           ...schedulePayload,
@@ -296,7 +298,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
         const res = await fetch('/api/patients', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ patientCode: form.patientCode.toUpperCase(), pin: form.pin, shiftId: parseInt(form.shiftId), center: form.center, ...schedulePayload, enrollmentDate: form.enrollmentDate, notes: form.notes || null }),
+          body: JSON.stringify({ patientCode: form.patientCode.toUpperCase(), name: form.name || null, pin: form.pin, shiftId: parseInt(form.shiftId), center: form.center, ...schedulePayload, enrollmentDate: form.enrollmentDate, notes: form.notes || null }),
         })
         if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
       }
@@ -381,6 +383,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-mono font-bold text-blue-700">{p.patientCode}</p>
+                  {(p as any).name && <p className="text-sm text-slate-700 font-medium">{(p as any).name}</p>}
                   <p className="text-xs text-slate-500 mt-0.5">{p.center} · {p.shift.name} · {scheduleLabel(p)}</p>
                   <p className={clsx('text-xs mt-1', promColor)}>
                     {lang === 'de' ? 'Letzte PROM: ' : 'Last PROM: '}
@@ -423,7 +426,10 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
           <tbody>
             {filteredPatients.map((p) => (
               <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50">
-                <td className="py-2.5 px-4 font-mono font-semibold text-blue-700">{p.patientCode}</td>
+                <td className="py-2.5 px-4">
+                  <span className="font-mono font-semibold text-blue-700">{p.patientCode}</span>
+                  {(p as any).name && <p className="text-xs text-slate-600 mt-0.5">{(p as any).name}</p>}
+                </td>
                 <td className="py-2.5 px-4 text-slate-600">{p.center}</td>
                 <td className="py-2.5 px-4 text-slate-500 text-xs">{scheduleLabel(p)}</td>
                 <td className="py-2.5 px-4 text-slate-500">{p.shift.name}</td>
@@ -472,6 +478,14 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
               </label>
               <input value={form.patientCode} onChange={(e) => setForm((f) => ({ ...f, patientCode: e.target.value.toUpperCase() }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 font-mono focus:outline-none focus:border-blue-500" placeholder="HMY-0001" maxLength={8} />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-600 mb-1">
+                {lang === 'de' ? 'Name (optional, verschlüsselt gespeichert)' : 'Name (optional, stored encrypted)'}
+              </label>
+              <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                placeholder={lang === 'de' ? 'Vorname Nachname' : 'First Last'} />
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-600 mb-1">

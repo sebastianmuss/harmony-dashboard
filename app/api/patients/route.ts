@@ -3,12 +3,14 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { isPasswordValid } from '@/lib/password'
+import { encrypt, decrypt } from '@/lib/crypto'
 import { writeAudit, getIp } from '@/lib/audit'
 import { z } from 'zod'
 import logger from '@/lib/logger'
 
 const CreatePatientSchema = z.object({
   patientCode:        z.string().min(1).max(20).toUpperCase(),
+  name:               z.string().max(120).optional().nullable(),
   pin:                z.string().superRefine((p, ctx) => { if (!isPasswordValid(p)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Password must be at least 12 characters and include upper, lower, digit, and special character.' }) }),
   shiftId:            z.int().positive(),
   enrollmentDate:     z.string().date(),
@@ -47,9 +49,10 @@ export async function GET(req: NextRequest) {
     orderBy: [{ center: 'asc' }, { patientCode: 'asc' }],
   })
 
-  // Never return PIN hashes to the client
-  return NextResponse.json(patients.map(({ pin: _pin, pinIndexHash: _idx, promResponses, ...p }) => ({
+  // Never return PIN hashes; decrypt name before sending
+  return NextResponse.json(patients.map(({ pin: _pin, pinIndexHash: _idx, nameEncrypted, promResponses, ...p }) => ({
     ...p,
+    name: nameEncrypted ? decrypt(nameEncrypted) : null,
     lastPromDate: promResponses[0]?.sessionDate ?? null,
   })))
 }
@@ -67,13 +70,14 @@ export async function POST(req: NextRequest) {
     logger.warn({ path: '/api/patients', errors: parsed.error.flatten() }, 'Patient create validation failed')
     return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 })
   }
-  const { patientCode, pin, shiftId, enrollmentDate, center, dialysisSchedule, customDialysisDays, notes } = parsed.data
+  const { patientCode, name, pin, shiftId, enrollmentDate, center, dialysisSchedule, customDialysisDays, notes } = parsed.data
 
   const pinHash = await bcrypt.hash(pin, 12)
 
   const patient = await prisma.patient.create({
     data: {
       patientCode,
+      nameEncrypted: name ? encrypt(name) : null,
       pin: pinHash,
       shiftId,
       center: center ?? 'Feldbach',
@@ -85,7 +89,7 @@ export async function POST(req: NextRequest) {
     include: { shift: { select: { name: true } } },
   })
 
-  const { pin: _pin, pinIndexHash: _idx, ...safePatient } = patient
+  const { pin: _pin, pinIndexHash: _idx, nameEncrypted, ...safePatient } = patient
 
   writeAudit({
     actorType: session.user.role,
@@ -97,5 +101,5 @@ export async function POST(req: NextRequest) {
     ip: getIp(req),
   })
 
-  return NextResponse.json(safePatient, { status: 201 })
+  return NextResponse.json({ ...safePatient, name: name ?? null }, { status: 201 })
 }

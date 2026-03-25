@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { isPasswordValid } from '@/lib/password'
+import { encrypt, decrypt } from '@/lib/crypto'
 import { writeAudit, getIp } from '@/lib/audit'
 
 // ── PATCH /api/patients/[id] ──────────────────────────────────────────────────
@@ -26,6 +27,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.isActive !== undefined) update.isActive = body.isActive
   if (body.droppedOutAt !== undefined) update.droppedOutAt = body.droppedOutAt ? new Date(body.droppedOutAt) : null
   if (body.notes !== undefined) update.notes = body.notes
+  if (body.name !== undefined) update.nameEncrypted = body.name ? encrypt(body.name) : null
   if (body.dryWeight !== undefined) update.dryWeight = body.dryWeight ? parseFloat(body.dryWeight) : null
   if (body.pin !== undefined) {
     if (!isPasswordValid(body.pin)) {
@@ -40,7 +42,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     include: { shift: { select: { name: true, schedule: true } } },
   })
 
-  const { pin: _pin, pinIndexHash: _idx, ...safePatient } = patient
+  const { pin: _pin, pinIndexHash: _idx, nameEncrypted, ...safePatient } = patient
 
   // Log changed fields (exclude PIN — already redacted from update object)
   const loggedChanges = Object.fromEntries(
@@ -56,7 +58,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     ip: getIp(req),
   })
 
-  return NextResponse.json(safePatient)
+  return NextResponse.json({ ...safePatient, name: nameEncrypted ? decrypt(nameEncrypted) : null })
 }
 
 // ── DELETE /api/patients/[id] — soft delete (deactivate) ─────────────────────
