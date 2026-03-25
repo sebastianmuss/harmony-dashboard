@@ -902,20 +902,21 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
             <h1 className="text-base font-black leading-tight truncate">HARMONY · {lang === 'de' ? 'Pflege' : 'Provider'}</h1>
             <p className="text-blue-200 text-xs truncate">{providerName} · {shiftName}</p>
           </div>
-          <div className="flex gap-1.5 items-center flex-shrink-0">
+          <div className="flex items-center gap-3 flex-shrink-0">
             {role === 'admin' && (
-              <Link href="/admin" className="text-blue-200 hover:text-white text-xs border border-blue-500 px-2 py-1.5 rounded-lg transition whitespace-nowrap">
+              <Link href="/admin" className="text-blue-300 hover:text-white text-xs transition whitespace-nowrap">
                 Admin
               </Link>
             )}
             <button
               onClick={() => setLang((l) => l === 'en' ? 'de' : 'en')}
-              className="text-blue-200 hover:text-white text-xs font-bold px-2 py-1.5 rounded-lg border border-blue-500 transition"
+              className="text-blue-300 hover:text-white text-xs font-bold transition"
             >
               {lang === 'en' ? 'DE' : 'EN'}
             </button>
-            <button onClick={() => signOut({ callbackUrl: '/login' })} className="text-blue-200 hover:text-white text-xs border border-blue-500 px-2 py-1.5 rounded-lg transition">
-              {lang === 'de' ? 'Abmelden' : 'Sign Out'}
+            <span className="text-blue-600 text-xs">|</span>
+            <button onClick={() => signOut({ callbackUrl: '/login' })} className="text-blue-400 hover:text-white text-xs transition">
+              {lang === 'de' ? 'Abmelden' : 'Sign out'}
             </button>
           </div>
         </div>

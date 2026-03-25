@@ -1755,27 +1755,28 @@ export default function AdminPanel({ adminName, adminUserId }: { adminName: stri
             <h1 className="text-lg font-black leading-tight">HARMONY · {lang === 'de' ? 'Admin' : 'Admin'}</h1>
             <p className="text-blue-200 text-xs truncate">{adminName}</p>
           </div>
-          <div className="flex gap-1.5 items-center flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             <select
               value={siteFilter}
               onChange={(e) => setSiteFilter(e.target.value)}
-              className="bg-blue-800 text-blue-100 border border-blue-600 text-xs px-2 py-1.5 rounded-lg focus:outline-none"
+              className="bg-blue-800 text-blue-100 border border-blue-700 text-xs px-2 py-1.5 rounded focus:outline-none"
             >
               <option value="all">{lang === 'de' ? 'Alle' : 'All'}</option>
               {CENTERS.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <Link href="/provider" className="text-blue-200 hover:text-white text-xs border border-blue-600 px-2 py-1.5 rounded-lg transition whitespace-nowrap">
+            <Link href="/provider" className="text-blue-300 hover:text-white text-xs transition whitespace-nowrap">
               {lang === 'de' ? 'Pflege' : 'Providers'}
             </Link>
             <button
               onClick={() => setLang((l) => l === 'de' ? 'en' : 'de')}
-              className="text-blue-200 hover:text-white text-xs font-bold px-2 py-1.5 rounded-lg border border-blue-600 transition"
+              className="text-blue-300 hover:text-white text-xs font-bold transition"
             >
               {lang === 'de' ? 'EN' : 'DE'}
             </button>
+            <span className="text-blue-700 text-xs">|</span>
             <button onClick={() => signOut({ callbackUrl: '/login' })}
-              className="text-blue-200 hover:text-white text-xs border border-blue-600 px-2 py-1.5 rounded-lg transition">
-              {lang === 'de' ? 'Abmelden' : 'Sign Out'}
+              className="text-blue-400 hover:text-white text-xs transition">
+              {lang === 'de' ? 'Abmelden' : 'Sign out'}
             </button>
           </div>
         </div>
