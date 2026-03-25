@@ -1,17 +1,11 @@
-Copyright (c) 2026 Medical University of Vienna
-Author: Sebastian Mussnig, Department of Medicine III, Division of Nephrology and Dialysis
-
-The usage rights (Werknutzungsrecht) to this software vest in the Medical University of Vienna
-in accordance with Austrian copyright law (UrhG). Sebastian Mussnig retains authorship
-(Urheberschaft) as the creator of the work.
+Author: Sebastian Mussnig, Division of Nephrology and Dialysis, Department of Medicine III
 
 Permission is granted to view and inspect the source code for the purposes of academic peer
 review, research transparency, and verification of data protection and security measures
 described in associated publications.
 
 Any other use — including but not limited to copying, modification, distribution, sublicensing,
-or commercial use — requires explicit written permission from the Medical University of Vienna.
-For commercialisation enquiries, contact the MedUni Wien Technology Transfer Office.
+or commercial use — requires explicit written permission from the author.
 
 THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
 INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
@@ -20,4 +14,4 @@ FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TO
 OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-Contact: sebastian.mussnig@meduniwien.ac.at
+Contact: https://orcid.org/0000-0003-2223-2067

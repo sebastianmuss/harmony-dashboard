@@ -6,7 +6,7 @@ type Lang = 'en' | 'de'
 
 const T = {
   en: {
-    trial:        'Feasibility Trial · Medical University of Vienna',
+    trial:        'Feasibility Trial · Division of Nephrology and Dialysis',
     subtitle:     'A shared decision-making dashboard for fluid management in haemodialysis.',
     tagline:      'A transnational feasibility trial (Austria, Ireland, Scotland) integrating routinely collected dialysis data with patient-reported symptoms to enable patient-centred fluid management decisions.',
     signin:       'Sign in to the dashboard',
@@ -52,7 +52,7 @@ const T = {
     sessions:   'sessions',
   },
   de: {
-    trial:        'Machbarkeitsstudie · Medizinische Universität Wien',
+    trial:        'Machbarkeitsstudie · Abteilung für Nephrologie und Dialyse',
     subtitle:     'Ein Shared-Decision-Making-Dashboard für das Flüssigkeitsmanagement in der Hämodialyse.',
     tagline:      'Eine transnationale Machbarkeitsstudie (Österreich, Irland, Schottland), die routinemäßig erhobene Dialysedaten mit patientenberichteten Symptomen verbindet, um patientenzentrierte Entscheidungen im Flüssigkeitsmanagement zu ermöglichen.',
     signin:       'Zum Dashboard anmelden',

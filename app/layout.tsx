@@ -18,7 +18,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <div className="flex-1">{children}</div>
         </SessionProvider>
         <footer className="border-t border-slate-200 bg-white/60 py-4 px-8 text-center text-xs text-slate-400">
-          © 2026 Medical University of Vienna
+          HARMONY Study · 2026
         </footer>
       </body>
     </html>
