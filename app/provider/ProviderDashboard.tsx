@@ -630,7 +630,7 @@ function PromEntryModal({ patient, timepoint, lang, onClose, onSaved }: {
               {lang === 'de' ? 'Erholungszeit nach Dialyse' : 'Recovery time after dialysis'}
               <span className="text-slate-400 font-normal ml-1">({lang === 'de' ? 'optional' : 'optional'})</span>
             </p>
-            <div className="grid grid-cols-4 gap-2 mt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
               {RECOVERY_OPTIONS.map((opt) => {
                 const selected = scores.recoveryTime === opt
                 return (
@@ -638,7 +638,7 @@ function PromEntryModal({ patient, timepoint, lang, onClose, onSaved }: {
                     key={opt}
                     onClick={() => setScores((s) => ({ ...s, recoveryTime: s.recoveryTime === opt ? null : opt }))}
                     className={clsx(
-                      'h-10 rounded-xl border-2 font-semibold text-sm transition-all',
+                      'h-11 rounded-xl border-2 font-semibold text-sm transition-all',
                       selected ? 'bg-blue-600 border-blue-700 text-white' : 'border-slate-300 bg-white text-slate-600 hover:border-blue-400 hover:bg-blue-50'
                     )}
                   >

@@ -350,7 +350,8 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
       {loading && <div className="text-center py-8 text-slate-400">{lang === 'de' ? 'Lade…' : 'Loading…'}</div>}
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-slate-50">
             <tr className="text-left text-slate-500 border-b">
               <th className="py-3 px-4 font-semibold">Code</th>
@@ -402,6 +403,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {showAdd && (
@@ -636,7 +638,8 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
       {loading && <div className="text-center py-8 text-slate-400">{lang === 'de' ? 'Lade…' : 'Loading…'}</div>}
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-sm">
           <thead className="bg-slate-50">
             <tr className="text-left text-slate-500 border-b">
               <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Name' : 'Name'}</th>
@@ -674,6 +677,7 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {showAdd && (
@@ -836,7 +840,7 @@ function ConfigTab({ lang }: { lang: Lang }) {
   }
 
   return (
-    <div className="max-w-lg space-y-6">
+    <div className="max-w-lg w-full space-y-6 min-w-0">
       <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
         <h3 className="font-bold text-slate-800 text-lg">
           {lang === 'de' ? 'Studien-Konfiguration' : 'Study Configuration'}
@@ -874,7 +878,7 @@ function ConfigTab({ lang }: { lang: Lang }) {
             {lang === 'de' ? 'Studienstartdatum *' : 'Study Start Date *'}
           </label>
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-            className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" />
+            className="w-full min-w-0 max-w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" />
           <p className="text-slate-400 text-xs mt-1">
             {lang === 'de'
               ? 'Woche 1 beginnt an diesem Datum. Der Zeitpunktzyklus (gestern → Ankunft → jetzt) wiederholt sich alle 3 Wochen.'
