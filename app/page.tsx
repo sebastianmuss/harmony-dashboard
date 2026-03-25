@@ -168,48 +168,59 @@ export default async function RootPage() {
               <div className="flex-1 bg-white rounded-md px-3 py-1 text-xs text-slate-400 mx-2 border border-slate-200">harmony-app.at/provider</div>
             </div>
             <div className="bg-slate-50 p-4">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-3">
                 <div>
                   <p className="text-xs text-slate-400 uppercase tracking-widest">MWF Morning · Woche 3</p>
                   <p className="font-semibold text-slate-700 text-sm mt-0.5">Shift Dashboard</p>
                 </div>
                 <span className="text-xs bg-green-50 text-green-700 border border-green-200 rounded-full px-2.5 py-1">8 / 12 PROMs</span>
               </div>
-              {/* Patient cards */}
+              {/* Patient cards — mirroring PatientCard component exactly */}
               {[
-                { code: 'HMY-0042', scores: [2,3,1], rt: '3–6h', weight: '74.2', idwg: '1.8', bp: '138/82', submitted: true, stale: false },
-                { code: 'HMY-0017', scores: [4,4,3], rt: '>12h', weight: '81.5', idwg: '3.1', bp: '152/90', submitted: true, stale: false },
-                { code: 'HMY-0091', scores: null, rt: null, weight: '—', idwg: '—', bp: '—', submitted: false, stale: true },
-              ].map((p) => (
-                <div key={p.code} className={`bg-white rounded-xl border p-3 mb-2 shadow-sm ${p.stale ? 'border-amber-200' : 'border-slate-200'}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-mono text-xs font-semibold text-slate-700">{p.code}</span>
-                    <div className="flex gap-1.5 items-center">
-                      {p.submitted
-                        ? <span className="text-xs bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5">PROM ✓</span>
-                        : <span className="text-xs bg-slate-100 text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">PROM ausstehend</span>
-                      }
-                      {p.stale && <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 rounded-full px-2 py-0.5">7 Tage</span>}
-                    </div>
-                  </div>
-                  {p.scores && (
-                    <div className="flex gap-3 mb-2">
-                      {['💧','🥤','⚖️'].map((icon, i) => (
-                        <div key={icon} className="flex items-center gap-1">
-                          <span className="text-xs">{icon}</span>
-                          <span className={`text-xs font-bold ${p.scores![i] >= 4 ? 'text-red-500' : p.scores![i] === 3 ? 'text-amber-500' : 'text-green-600'}`}>{p.scores![i]}</span>
+                { code: 'HMY-0042', scores: [2,3,1] as [number,number,number], submitted: true,  onHD: true,  stale: false, sessions: 14 },
+                { code: 'HMY-0017', scores: [4,4,3] as [number,number,number], submitted: true,  onHD: true,  stale: false, sessions: 13 },
+                { code: 'HMY-0091', scores: null,                              submitted: false, onHD: true,  stale: true,  sessions: 11 },
+                { code: 'HMY-0055', scores: null,                              submitted: false, onHD: false, stale: false, sessions: 12 },
+              ].map((p) => {
+                const borderColor = p.submitted ? 'border-green-300' : p.onHD ? 'border-yellow-300' : 'border-slate-200'
+                const dotColor    = p.submitted ? 'bg-green-500'     : p.onHD ? 'bg-yellow-400'     : 'bg-slate-300'
+                const scoreBg: Record<number,string> = {
+                  1: 'bg-green-100 text-green-800 border-green-300',
+                  2: 'bg-teal-100 text-teal-800 border-teal-300',
+                  3: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+                  4: 'bg-orange-100 text-orange-800 border-orange-300',
+                  5: 'bg-red-100 text-red-800 border-red-300',
+                }
+                return (
+                  <div key={p.code} className={`bg-white rounded-xl border-2 shadow-sm mb-2 overflow-hidden ${borderColor}`}>
+                    <div className="flex items-start gap-3 px-4 py-3">
+                      <div className={`w-3 h-3 rounded-full flex-shrink-0 mt-1.5 ${dotColor}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-mono font-bold text-blue-700 flex-1 text-sm">{p.code}</p>
+                          {p.scores && (
+                            <div className="flex gap-1 flex-shrink-0">
+                              {p.scores.map((s, i) => (
+                                <span key={i} className={`inline-flex items-center justify-center w-7 h-7 rounded-lg border-2 font-bold text-xs ${scoreBg[s]}`}>{s}</span>
+                              ))}
+                            </div>
+                          )}
+                          <span className={`text-xs px-2.5 py-1 rounded-lg font-semibold flex-shrink-0 ${p.submitted ? 'bg-slate-100 text-slate-600' : 'bg-blue-600 text-white'}`}>
+                            {p.submitted ? 'PROM bearbeiten' : 'PROM erfassen'}
+                          </span>
+                          <span className="text-slate-400 text-xs flex-shrink-0">▼</span>
                         </div>
-                      ))}
-                      <span className="text-xs text-slate-400">⏱️ {p.rt}</span>
+                        <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5 flex-wrap">
+                          <span>Feldbach</span>
+                          <span>·</span>
+                          <span>{p.sessions} sessions</span>
+                          {p.stale && <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-semibold">Letzte PROM: 9d</span>}
+                        </div>
+                      </div>
                     </div>
-                  )}
-                  <div className="flex gap-3 text-xs text-slate-500">
-                    <span>⚖ {p.weight} kg</span>
-                    <span>IDWG {p.idwg} kg</span>
-                    <span>BP {p.bp}</span>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
