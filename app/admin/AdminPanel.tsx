@@ -212,6 +212,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [editPatient, setEditPatient] = useState<Patient | null>(null)
+  const [search, setSearch] = useState('')
   const [form, setForm] = useState({
     patientCode: '', pin: '', confirmPin: '', shiftId: '', center: 'Feldbach',
     dialysisSchedule: 'MWF', customDialysisDays: '',
@@ -326,6 +327,16 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
 
   const customDaysArr = form.customDialysisDays ? form.customDialysisDays.split(',').map(Number).filter(Boolean) : []
 
+  const filteredPatients = patients.filter((p) => {
+    if (filterActive ? !p.isActive : p.isActive) return false
+    if (centerFilter !== 'all' && p.center !== centerFilter) return false
+    if (search) {
+      const q = search.toLowerCase()
+      if (!p.patientCode.toLowerCase().includes(q) && !p.center.toLowerCase().includes(q) && !p.shift.name.toLowerCase().includes(q)) return false
+    }
+    return true
+  })
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -347,9 +358,54 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
         </button>
       </div>
 
+      <input
+        type="search"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder={lang === 'de' ? 'Suche nach Code, Zentrum, Schicht…' : 'Search by code, centre, shift…'}
+        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-white"
+      />
+
       {loading && <div className="text-center py-8 text-slate-400">{lang === 'de' ? 'Lade…' : 'Loading…'}</div>}
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      {/* Mobile cards */}
+      <div className="md:hidden space-y-2">
+        {filteredPatients.length === 0 && !loading && (
+          <p className="text-center py-8 text-slate-400 text-sm">{lang === 'de' ? 'Keine Patienten gefunden' : 'No patients found'}</p>
+        )}
+        {filteredPatients.map((p) => {
+          const days = p.lastPromDate ? Math.floor((Date.now() - new Date(p.lastPromDate).getTime()) / 86_400_000) : null
+          const promColor = days === null ? 'text-red-500' : days > 14 ? 'text-red-600' : days > 7 ? 'text-amber-600' : 'text-slate-500'
+          return (
+            <div key={p.id} className="bg-white rounded-xl border border-slate-200 px-4 py-3 shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-mono font-bold text-blue-700">{p.patientCode}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{p.center} · {p.shift.name} · {scheduleLabel(p)}</p>
+                  <p className={clsx('text-xs mt-1', promColor)}>
+                    {lang === 'de' ? 'Letzte PROM: ' : 'Last PROM: '}
+                    {days === null ? (lang === 'de' ? 'keine' : 'none') : `${p.lastPromDate!.slice(0, 10)} (${days}d)`}
+                  </p>
+                  <p className="text-xs text-slate-400">{p._count.promResponses} {lang === 'de' ? 'Sitzungen' : 'sessions'}</p>
+                </div>
+                <div className="flex flex-col gap-1 flex-shrink-0">
+                  <button onClick={() => openEdit(p)} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-lg px-3 py-1.5 font-semibold">
+                    {lang === 'de' ? 'Bearbeiten' : 'Edit'}
+                  </button>
+                  {p.isActive && (
+                    <button onClick={() => deactivatePatient(p.id)} className="text-xs bg-red-50 text-red-600 border border-red-200 rounded-lg px-3 py-1.5 font-semibold">
+                      {lang === 'de' ? 'Ausscheiden' : 'Drop out'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-slate-50">
@@ -365,11 +421,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
             </tr>
           </thead>
           <tbody>
-            {patients.filter((p) => {
-              if (filterActive ? !p.isActive : p.isActive) return false
-              if (centerFilter !== 'all' && p.center !== centerFilter) return false
-              return true
-            }).map((p) => (
+            {filteredPatients.map((p) => (
               <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50">
                 <td className="py-2.5 px-4 font-mono font-semibold text-blue-700">{p.patientCode}</td>
                 <td className="py-2.5 px-4 text-slate-600">{p.center}</td>
@@ -396,8 +448,8 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
                 </td>
               </tr>
             ))}
-            {patients.filter((p) => filterActive ? p.isActive : !p.isActive).length === 0 && (
-              <tr><td colSpan={7} className="py-8 text-center text-slate-400">
+            {filteredPatients.length === 0 && (
+              <tr><td colSpan={8} className="py-8 text-center text-slate-400">
                 {lang === 'de' ? 'Keine Patienten gefunden' : 'No patients found'}
               </td></tr>
             )}
@@ -565,6 +617,7 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   const [form, setForm] = useState({ name: '', username: '', password: '', confirmPassword: '', role: 'provider', shiftId: '', center: 'Feldbach' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [searchProvider, setSearchProvider] = useState('')
 
   const loadProviders = useCallback(async () => {
     const res = await fetch('/api/providers')
@@ -627,6 +680,17 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
     }
   }
 
+  const filteredProviders = providers.filter((p) => {
+    const q = searchProvider.toLowerCase()
+    if (!q) return true
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.username.toLowerCase().includes(q) ||
+      (p.center ?? '').toLowerCase().includes(q) ||
+      (p.shift?.name ?? '').toLowerCase().includes(q)
+    )
+  })
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -635,9 +699,49 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
         </button>
       </div>
 
+      {/* Search */}
+      <input
+        type="search"
+        value={searchProvider}
+        onChange={(e) => setSearchProvider(e.target.value)}
+        placeholder={lang === 'de' ? 'Suche nach Name, Benutzername, Zentrum…' : 'Search by name, username, center…'}
+        className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+      />
+
       {loading && <div className="text-center py-8 text-slate-400">{lang === 'de' ? 'Lade…' : 'Loading…'}</div>}
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      {/* Mobile cards */}
+      <div className="md:hidden space-y-3">
+        {filteredProviders.map((p) => (
+          <div key={p.id} className="bg-white rounded-xl shadow-sm p-4 space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-semibold text-slate-800">{p.name}</p>
+                <p className="text-xs font-mono text-slate-400">{p.username}</p>
+              </div>
+              <span className={clsx('px-2 py-0.5 rounded text-xs font-semibold shrink-0', p.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700')}>
+                {p.role === 'admin' ? 'Admin' : (lang === 'de' ? 'Mitarbeiter' : 'Provider')}
+              </span>
+            </div>
+            {(p.center || p.shift) && (
+              <p className="text-xs text-slate-500">
+                {[p.center, p.shift?.name].filter(Boolean).join(' · ')}
+              </p>
+            )}
+            <div className="flex items-center justify-between pt-1">
+              <span className={clsx('text-xs font-semibold', p.isActive ? 'text-green-600' : 'text-slate-400')}>
+                {p.isActive ? (lang === 'de' ? 'Aktiv' : 'Active') : (lang === 'de' ? 'Inaktiv' : 'Inactive')}
+              </span>
+              <button onClick={() => openEdit(p)} className="text-xs text-blue-600 font-semibold hover:underline">
+                {lang === 'de' ? 'Bearbeiten' : 'Edit'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-sm">
           <thead className="bg-slate-50">
@@ -652,7 +756,7 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
             </tr>
           </thead>
           <tbody>
-            {providers.map((p) => (
+            {filteredProviders.map((p) => (
               <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50">
                 <td className="py-2.5 px-4 font-medium">{p.name}</td>
                 <td className="py-2.5 px-4 text-slate-500 font-mono text-xs">{p.username}</td>

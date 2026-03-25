@@ -16,6 +16,14 @@ const config: Config = {
           bg: '#f8fafc',
         },
       },
+      // ── Style trial: remap large radii → tighter, more clinical values ──────
+      // To revert: delete or comment out this borderRadius block
+      borderRadius: {
+        'lg':   '5px',
+        'xl':   '8px',
+        '2xl':  '11px',
+        '3xl':  '16px',
+      },
       fontSize: {
         '2xl': ['1.5rem', { lineHeight: '2rem' }],
         '3xl': ['1.875rem', { lineHeight: '2.25rem' }],

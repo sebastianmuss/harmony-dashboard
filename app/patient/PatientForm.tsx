@@ -603,19 +603,17 @@ export default function PatientForm({
         <Header />
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="bg-white rounded-3xl p-8 sm:p-10 max-w-xl w-full text-center shadow-2xl">
-            <div className="text-7xl mb-4">✅</div>
             <h1 className="text-3xl sm:text-4xl font-black text-slate-800 mb-3">{t.thankYou}</h1>
             <p className="text-slate-600 text-xl mb-1">{t.savedOk}</p>
             <p className="text-slate-400 text-lg mb-6">{t.weekOf(studyWeek)}</p>
 
             {scores.fluidStatusScore !== null && (
               <div className="grid grid-cols-3 gap-3 mb-4">
-                {PROM_QUESTIONS[lang].map((q, i) => {
+                {PROM_QUESTIONS[lang].map((_q, i) => {
                   const keys = ['fluidStatusScore', 'thirstScore', 'fluidOverloadScore'] as const
                   const score = scores[keys[i]] ?? 0
                   return (
                     <div key={i} className="bg-slate-50 rounded-2xl p-4">
-                      <div className="text-3xl mb-2">{q.icon}</div>
                       <div className={clsx('text-3xl font-black rounded-xl py-1 text-white', GRADE_BG[score])}>
                         {score}
                       </div>
@@ -628,7 +626,6 @@ export default function PatientForm({
 
             {scores.recoveryTime && (
               <div className="bg-slate-50 rounded-2xl px-4 py-3 mb-6 flex items-center justify-center gap-2">
-                <span className="text-xl">{RECOVERY_QUESTION[lang].icon}</span>
                 <span className="text-slate-600 font-semibold">{RECOVERY_LABELS[scores.recoveryTime as keyof typeof RECOVERY_LABELS][lang]}</span>
               </div>
             )}
@@ -670,16 +667,6 @@ export default function PatientForm({
           <p className="text-blue-900 text-xl sm:text-2xl font-bold">{lang === 'de' ? timepointLabel : timepointLabelEn}</p>
         </div>
 
-        {/* Grade legend */}
-        <div className="bg-blue-50 rounded-2xl px-5 py-3 flex flex-wrap gap-x-5 gap-y-1 items-center">
-          <p className="text-blue-800 font-semibold text-sm">{t.scaleLabel}</p>
-          {([1, 2, 3, 4, 5] as const).map((g) => (
-            <span key={g} className="text-slate-700 text-sm">
-              <span className="font-black">{g}</span> = {t.grades[g]}
-            </span>
-          ))}
-        </div>
-
         {/* Questions — 1 col mobile, 3 col desktop */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {PROM_QUESTIONS[lang].map((question, i) => {
@@ -687,12 +674,14 @@ export default function PatientForm({
             const key = keys[i]
             return (
               <div key={key} className="bg-white rounded-2xl p-5 shadow-lg flex flex-col gap-4">
-                <div className="flex items-start gap-3">
-                  <span className="text-3xl sm:text-4xl flex-shrink-0">{question.icon}</span>
-                  <div>
-                    <p className="text-slate-800 text-lg sm:text-xl font-bold leading-tight">{question.label}</p>
-                    <p className="text-slate-500 text-sm mt-1">{question.sublabel}</p>
-                  </div>
+                <div>
+                  <p className="text-slate-800 text-lg sm:text-xl font-bold leading-tight">{question.label}</p>
+                  {question.sublabel && <p className="text-slate-500 text-sm mt-1">{question.sublabel}</p>}
+                  <p className="text-slate-400 text-xs mt-1">
+                    <span className="font-semibold">1</span> = {t.grades[1]}
+                    <span className="mx-1.5">·</span>
+                    <span className="font-semibold">5</span> = {t.grades[5]}
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-5 gap-2 mt-auto">
@@ -705,13 +694,13 @@ export default function PatientForm({
                         aria-label={`${grade}: ${t.grades[grade]}`}
                         className={clsx(
                           'flex items-center justify-center rounded-xl border-4 transition-all duration-150',
-                          'py-4 sm:py-5 cursor-pointer focus:outline-none focus:ring-4 focus:ring-offset-1 active:scale-95',
+                          'py-3 cursor-pointer focus:outline-none focus:ring-4 focus:ring-offset-1 active:scale-95',
                           isSelected
                             ? `${GRADE_BG[grade]} text-white shadow-lg scale-105`
                             : `border-slate-300 bg-white text-slate-700 ${GRADE_HOVER[grade]}`
                         )}
                       >
-                        <span className="text-2xl sm:text-3xl font-black">{grade}</span>
+                        <span className="text-2xl font-black">{grade}</span>
                       </button>
                     )
                   })}
@@ -723,12 +712,9 @@ export default function PatientForm({
 
         {/* Recovery time — optional 4th question */}
         <div className="bg-white rounded-2xl p-5 shadow-lg">
-          <div className="flex items-start gap-3 mb-4">
-            <span className="text-3xl sm:text-4xl flex-shrink-0">{RECOVERY_QUESTION[lang].icon}</span>
-            <div>
-              <p className="text-slate-800 text-lg sm:text-xl font-bold leading-tight">{RECOVERY_QUESTION[lang].label}</p>
-              <p className="text-slate-500 text-sm mt-1">{RECOVERY_QUESTION[lang].sublabel} <span className="text-slate-400">{RECOVERY_QUESTION[lang].optional}</span></p>
-            </div>
+          <div className="mb-4">
+            <p className="text-slate-800 text-lg sm:text-xl font-bold leading-tight">{RECOVERY_QUESTION[lang].label}</p>
+            <p className="text-slate-500 text-sm mt-1">{RECOVERY_QUESTION[lang].sublabel} <span className="text-slate-400">{RECOVERY_QUESTION[lang].optional}</span></p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {RECOVERY_OPTIONS.map((opt) => {
@@ -770,7 +756,6 @@ export default function PatientForm({
           {loading ? t.saving : allAnswered ? t.submit : t.answersRequired}
         </button>
 
-        <p className="text-blue-300 text-sm text-center pb-4">{t.confidential}</p>
       </div>
     </div>
   )
