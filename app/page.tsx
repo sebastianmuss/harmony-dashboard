@@ -109,6 +109,113 @@ export default async function RootPage() {
         </div>
       </section>
 
+      {/* Interface previews */}
+      <section className="max-w-5xl mx-auto w-full px-6 py-10">
+        <h2 className="text-xs font-semibold tracking-widest text-blue-600 uppercase mb-2 text-center">Platform Interface</h2>
+        <p className="text-sm text-slate-500 text-center mb-8">Patient and clinician views designed for use at the dialysis chair.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+          {/* Patient view mockup */}
+          <div className="rounded-2xl border border-slate-200 shadow-md overflow-hidden bg-white">
+            {/* Browser chrome */}
+            <div className="bg-slate-100 border-b border-slate-200 px-4 py-2 flex items-center gap-2">
+              <div className="flex gap-1.5"><div className="w-3 h-3 rounded-full bg-slate-300"/><div className="w-3 h-3 rounded-full bg-slate-300"/><div className="w-3 h-3 rounded-full bg-slate-300"/></div>
+              <div className="flex-1 bg-white rounded-md px-3 py-1 text-xs text-slate-400 mx-2 border border-slate-200">harmony-app.at/patient</div>
+            </div>
+            {/* App content */}
+            <div className="bg-slate-50 p-4">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-xs text-slate-400 uppercase tracking-widest">HARMONY-Studie · Woche 3/12</p>
+                  <p className="font-semibold text-slate-700 text-sm mt-0.5">Hallo, HMY-0042!</p>
+                </div>
+                <span className="text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded-full px-2.5 py-1">Heute: Ankunft</span>
+              </div>
+              {/* Questions */}
+              {[
+                { icon: '💧', label: 'Wie fühlen Sie sich heute?', sub: 'Allgemeines Wohlbefinden', selected: 2 },
+                { icon: '🥤', label: 'Wie stark ist Ihr Durstgefühl?', sub: '1 = kein Durst · 5 = extremer Durst', selected: 3 },
+                { icon: '⚖️', label: 'Fühlen Sie sich aufgeschwemmt?', sub: '1 = gar nicht · 5 = sehr stark', selected: 1 },
+              ].map((q) => (
+                <div key={q.label} className="bg-white rounded-xl border border-slate-200 p-3 mb-2 shadow-sm">
+                  <p className="text-xs font-medium text-slate-700 mb-0.5">{q.icon} {q.label}</p>
+                  <p className="text-xs text-slate-400 mb-2">{q.sub}</p>
+                  <div className="flex gap-1.5">
+                    {[1,2,3,4,5].map((n) => (
+                      <div key={n} className={`flex-1 rounded-lg py-2 text-center text-sm font-semibold border ${n === q.selected ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{n}</div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {/* Recovery time */}
+              <div className="bg-white rounded-xl border border-slate-200 p-3 mb-3 shadow-sm">
+                <p className="text-xs font-medium text-slate-700 mb-0.5">⏱️ Erholungszeit nach Dialyse</p>
+                <p className="text-xs text-slate-400 mb-2">Zeit bis zur Erholung nach der letzten Sitzung</p>
+                <div className="flex gap-1.5">
+                  {['0–2 Std.','3–6 Std.','7–12 Std.','>12 Std.'].map((o, i) => (
+                    <div key={o} className={`flex-1 rounded-lg py-1.5 text-center text-xs font-medium border ${i === 1 ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{o}</div>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-blue-600 text-white text-center rounded-xl py-2.5 text-sm font-semibold">Speichern</div>
+            </div>
+          </div>
+
+          {/* Provider view mockup */}
+          <div className="rounded-2xl border border-slate-200 shadow-md overflow-hidden bg-white">
+            <div className="bg-slate-100 border-b border-slate-200 px-4 py-2 flex items-center gap-2">
+              <div className="flex gap-1.5"><div className="w-3 h-3 rounded-full bg-slate-300"/><div className="w-3 h-3 rounded-full bg-slate-300"/><div className="w-3 h-3 rounded-full bg-slate-300"/></div>
+              <div className="flex-1 bg-white rounded-md px-3 py-1 text-xs text-slate-400 mx-2 border border-slate-200">harmony-app.at/provider</div>
+            </div>
+            <div className="bg-slate-50 p-4">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-xs text-slate-400 uppercase tracking-widest">MWF Morning · Woche 3</p>
+                  <p className="font-semibold text-slate-700 text-sm mt-0.5">Shift Dashboard</p>
+                </div>
+                <span className="text-xs bg-green-50 text-green-700 border border-green-200 rounded-full px-2.5 py-1">8 / 12 PROMs</span>
+              </div>
+              {/* Patient cards */}
+              {[
+                { code: 'HMY-0042', scores: [2,3,1], rt: '3–6h', weight: '74.2', idwg: '1.8', bp: '138/82', submitted: true, stale: false },
+                { code: 'HMY-0017', scores: [4,4,3], rt: '>12h', weight: '81.5', idwg: '3.1', bp: '152/90', submitted: true, stale: false },
+                { code: 'HMY-0091', scores: null, rt: null, weight: '—', idwg: '—', bp: '—', submitted: false, stale: true },
+              ].map((p) => (
+                <div key={p.code} className={`bg-white rounded-xl border p-3 mb-2 shadow-sm ${p.stale ? 'border-amber-200' : 'border-slate-200'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-mono text-xs font-semibold text-slate-700">{p.code}</span>
+                    <div className="flex gap-1.5 items-center">
+                      {p.submitted
+                        ? <span className="text-xs bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5">PROM ✓</span>
+                        : <span className="text-xs bg-slate-100 text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">PROM ausstehend</span>
+                      }
+                      {p.stale && <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 rounded-full px-2 py-0.5">7 Tage</span>}
+                    </div>
+                  </div>
+                  {p.scores && (
+                    <div className="flex gap-3 mb-2">
+                      {['💧','🥤','⚖️'].map((icon, i) => (
+                        <div key={icon} className="flex items-center gap-1">
+                          <span className="text-xs">{icon}</span>
+                          <span className={`text-xs font-bold ${p.scores![i] >= 4 ? 'text-red-500' : p.scores![i] === 3 ? 'text-amber-500' : 'text-green-600'}`}>{p.scores![i]}</span>
+                        </div>
+                      ))}
+                      <span className="text-xs text-slate-400">⏱️ {p.rt}</span>
+                    </div>
+                  )}
+                  <div className="flex gap-3 text-xs text-slate-500">
+                    <span>⚖ {p.weight} kg</span>
+                    <span>IDWG {p.idwg} kg</span>
+                    <span>BP {p.bp}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      </section>
+
       {/* Design */}
       <section className="max-w-3xl mx-auto w-full px-6 py-10">
         <h2 className="text-xs font-semibold tracking-widest text-blue-600 uppercase mb-4">Study Design</h2>
