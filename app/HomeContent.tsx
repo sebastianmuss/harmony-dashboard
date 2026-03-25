@@ -1,8 +1,7 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
-
-type Lang = 'en' | 'de'
+import { PROM_QUESTIONS, RECOVERY_OPTIONS, RECOVERY_LABELS, RECOVERY_QUESTION, type Lang } from '@/lib/prom-i18n'
 
 const T = {
   en: {
@@ -36,12 +35,6 @@ const T = {
     patientWeek:   'HARMONY Study · Week 3/12',
     patientHello:  'Hello, HMY-0042!',
     patientTP:     'Today: Arrival',
-    q1l: 'How do you feel today?',        q1s: 'General wellbeing / fluid balance',
-    q2l: 'How strong is your thirst?',    q2s: '1 = none · 5 = extreme',
-    q3l: 'Do you feel fluid overloaded?', q3s: '1 = not at all · 5 = very much',
-    recLabel: '⏱️ Recovery time after dialysis',
-    recSub:   'Time until you felt recovered after the last session',
-    recOpts:  ['0–2 h', '3–6 h', '7–12 h', '>12 h'],
     save:     'Save',
     shiftLabel: 'MWF Morning · Week 3',
     shiftTitle: 'Shift Dashboard',
@@ -81,12 +74,6 @@ const T = {
     patientWeek:   'HARMONY-Studie · Woche 3/12',
     patientHello:  'Hallo, HMY-0042!',
     patientTP:     'Heute: Ankunft',
-    q1l: 'Wie fühlen Sie sich heute?',        q1s: 'Allgemeines Wohlbefinden',
-    q2l: 'Wie stark ist Ihr Durstgefühl?',    q2s: '1 = kein Durst · 5 = extremer Durst',
-    q3l: 'Fühlen Sie sich überwässert?',       q3s: '1 = gar nicht · 5 = sehr stark',
-    recLabel: '⏱️ Erholungszeit nach Dialyse',
-    recSub:   'Zeit bis zur Erholung nach der letzten Sitzung',
-    recOpts:  ['0–2 Std.', '3–6 Std.', '7–12 Std.', '>12 Std.'],
     save:     'Speichern',
     shiftLabel: 'MWF Morning · Woche 3',
     shiftTitle: 'Shift Dashboard',
@@ -221,11 +208,9 @@ export default function HomeContent() {
                 </div>
                 <span className="text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded-full px-2.5 py-1">{t.patientTP}</span>
               </div>
-              {[
-                { icon: '💧', label: t.q1l, sub: t.q1s, selected: 2 },
-                { icon: '🥤', label: t.q2l, sub: t.q2s, selected: 3 },
-                { icon: '⚖️', label: t.q3l, sub: t.q3s, selected: 1 },
-              ].map((q) => (
+              {PROM_QUESTIONS[lang].map((q, idx) => ({
+                icon: q.icon, label: q.label, sub: q.sublabel, selected: [2, 3, 1][idx],
+              })).map((q) => (
                 <div key={q.label} className="bg-white rounded-xl border border-slate-200 p-3 mb-2 shadow-sm">
                   <p className="text-xs font-medium text-slate-700 mb-0.5">{q.icon} {q.label}</p>
                   <p className="text-xs text-slate-400 mb-2">{q.sub}</p>
@@ -237,11 +222,11 @@ export default function HomeContent() {
                 </div>
               ))}
               <div className="bg-white rounded-xl border border-slate-200 p-3 mb-3 shadow-sm">
-                <p className="text-xs font-medium text-slate-700 mb-0.5">{t.recLabel}</p>
-                <p className="text-xs text-slate-400 mb-2">{t.recSub}</p>
+                <p className="text-xs font-medium text-slate-700 mb-0.5">{RECOVERY_QUESTION[lang].icon} {RECOVERY_QUESTION[lang].label}</p>
+                <p className="text-xs text-slate-400 mb-2">{RECOVERY_QUESTION[lang].sublabel}</p>
                 <div className="flex gap-1.5">
-                  {t.recOpts.map((o, i) => (
-                    <div key={o} className={`flex-1 rounded-lg py-1.5 text-center text-xs font-medium border ${i === 1 ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{o}</div>
+                  {RECOVERY_OPTIONS.map((o, i) => (
+                    <div key={o} className={`flex-1 rounded-lg py-1.5 text-center text-xs font-medium border ${i === 1 ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{RECOVERY_LABELS[o][lang]}</div>
                   ))}
                 </div>
               </div>

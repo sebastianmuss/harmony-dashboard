@@ -9,6 +9,7 @@ import {
 import type { TimepointReference } from '@/lib/study'
 import { loess } from '@/lib/loess'
 import { computeBoxplot, groupByRelativeWeek } from '@/lib/boxplot'
+import { PROM_QUESTIONS, RECOVERY_OPTIONS, RECOVERY_LABELS, RECOVERY_QUESTION, type Lang } from '@/lib/prom-i18n'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Props {
@@ -55,30 +56,6 @@ const T = {
     timepointLabel: 'Bewertungszeitraum',
     scaleLabel: 'Skala:',
     grades: { 1: 'Ausgezeichnet', 2: 'Gut', 3: 'Mäßig', 4: 'Schlecht', 5: 'Sehr schlecht' } as Record<number, string>,
-    questions: [
-      {
-        label: 'Wie fühlen Sie sich heute?',
-        sublabel: 'Allgemeines Wohlbefinden bezogen auf Ihren Wasserhaushalt (1 = ausgezeichnet)',
-        icon: '💧',
-      },
-      {
-        label: 'Wie stark ist Ihr Durstgefühl?',
-        sublabel: '1 = kein Durst · 5 = extremer Durst',
-        icon: '🥤',
-      },
-      {
-        label: 'Fühlen Sie sich aufgeschwemmt oder überwässert?',
-        sublabel: '1 = gar nicht · 5 = sehr stark',
-        icon: '⚖️',
-      },
-    ],
-    recovery: {
-      label: 'Wie lange hat Ihre Erholung nach der Dialyse gedauert?',
-      sublabel: 'Zeit bis Sie sich nach der letzten Sitzung wieder erholt fühlten',
-      icon: '⏱️',
-      options: { '0-2h': '0–2 Std.', '3-6h': '3–6 Std.', '7-12h': '7–12 Std.', '>12h': '>12 Std.' } as Record<string, string>,
-      optional: '(optional)',
-    },
     submit: 'Antworten absenden',
     answersRequired: 'Bitte alle Fragen beantworten',
     saving: 'Wird gespeichert…',
@@ -205,7 +182,7 @@ const SCORE_LINE_COLORS = { fluid: '#3b82f6', thirst: '#f59e0b', overload: '#ef4
 
 type Scores = { fluidStatusScore: number | null; thirstScore: number | null; fluidOverloadScore: number | null; recoveryTime: string | null }
 type View = 'form' | 'submitted' | 'history'
-type Lang = 'de' | 'en'
+
 
 // ── Boxplot shape ─────────────────────────────────────────────────────────────
 function BoxplotShape(props: any) {
@@ -633,7 +610,7 @@ export default function PatientForm({
 
             {scores.fluidStatusScore !== null && (
               <div className="grid grid-cols-3 gap-3 mb-4">
-                {t.questions.map((q, i) => {
+                {PROM_QUESTIONS[lang].map((q, i) => {
                   const keys = ['fluidStatusScore', 'thirstScore', 'fluidOverloadScore'] as const
                   const score = scores[keys[i]] ?? 0
                   return (
@@ -651,8 +628,8 @@ export default function PatientForm({
 
             {scores.recoveryTime && (
               <div className="bg-slate-50 rounded-2xl px-4 py-3 mb-6 flex items-center justify-center gap-2">
-                <span className="text-xl">{t.recovery.icon}</span>
-                <span className="text-slate-600 font-semibold">{t.recovery.options[scores.recoveryTime]}</span>
+                <span className="text-xl">{RECOVERY_QUESTION[lang].icon}</span>
+                <span className="text-slate-600 font-semibold">{RECOVERY_LABELS[scores.recoveryTime as keyof typeof RECOVERY_LABELS][lang]}</span>
               </div>
             )}
 
@@ -705,7 +682,7 @@ export default function PatientForm({
 
         {/* Questions — 1 col mobile, 3 col desktop */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {t.questions.map((question, i) => {
+          {PROM_QUESTIONS[lang].map((question, i) => {
             const keys = ['fluidStatusScore', 'thirstScore', 'fluidOverloadScore'] as const
             const key = keys[i]
             return (
@@ -747,14 +724,14 @@ export default function PatientForm({
         {/* Recovery time — optional 4th question */}
         <div className="bg-white rounded-2xl p-5 shadow-lg">
           <div className="flex items-start gap-3 mb-4">
-            <span className="text-3xl sm:text-4xl flex-shrink-0">{t.recovery.icon}</span>
+            <span className="text-3xl sm:text-4xl flex-shrink-0">{RECOVERY_QUESTION[lang].icon}</span>
             <div>
-              <p className="text-slate-800 text-lg sm:text-xl font-bold leading-tight">{t.recovery.label}</p>
-              <p className="text-slate-500 text-sm mt-1">{t.recovery.sublabel} <span className="text-slate-400">{t.recovery.optional}</span></p>
+              <p className="text-slate-800 text-lg sm:text-xl font-bold leading-tight">{RECOVERY_QUESTION[lang].label}</p>
+              <p className="text-slate-500 text-sm mt-1">{RECOVERY_QUESTION[lang].sublabel} <span className="text-slate-400">{RECOVERY_QUESTION[lang].optional}</span></p>
             </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {(['0-2h', '3-6h', '7-12h', '>12h'] as const).map((opt) => {
+            {RECOVERY_OPTIONS.map((opt) => {
               const isSelected = scores.recoveryTime === opt
               return (
                 <button
@@ -767,7 +744,7 @@ export default function PatientForm({
                       : 'border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50'
                   )}
                 >
-                  {t.recovery.options[opt]}
+                  {RECOVERY_LABELS[opt][lang]}
                 </button>
               )
             })}

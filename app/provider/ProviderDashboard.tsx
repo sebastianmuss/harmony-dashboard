@@ -10,8 +10,7 @@ import Link from 'next/link'
 import clsx from 'clsx'
 import { loess } from '@/lib/loess'
 import { computeBoxplot, groupByStudyWeek } from '@/lib/boxplot'
-
-type Lang = 'en' | 'de'
+import { PROM_QUESTIONS, RECOVERY_OPTIONS, RECOVERY_LABELS, type Lang } from '@/lib/prom-i18n'
 
 interface PromEntry {
   id: number
@@ -210,18 +209,6 @@ function ProviderVerlaufView({ lang }: { lang: Lang }) {
   )
 }
 
-const PROM_QUESTIONS = {
-  en: [
-    { key: 'fluidStatusScore' as const, label: 'How do you feel today?', sub: 'General wellbeing / fluid balance (1 = excellent)' },
-    { key: 'thirstScore' as const, label: 'How strong is your thirst?', sub: '1 = none · 5 = extreme' },
-    { key: 'fluidOverloadScore' as const, label: 'Do you feel bloated or fluid overloaded?', sub: '1 = not at all · 5 = very much' },
-  ],
-  de: [
-    { key: 'fluidStatusScore' as const, label: 'Wie fühlen Sie sich heute?', sub: 'Allgemeines Wohlbefinden / Wasserhaushalt (1 = ausgezeichnet)' },
-    { key: 'thirstScore' as const, label: 'Wie stark ist Ihr Durstgefühl?', sub: '1 = kein Durst · 5 = extremer Durst' },
-    { key: 'fluidOverloadScore' as const, label: 'Fühlen Sie sich überwässert?', sub: '1 = gar nicht · 5 = sehr stark' },
-  ],
-}
 
 const TIMEPOINT_LABELS: Record<string, { en: string; de: string }> = {
   yesterday: { en: 'Yesterday (non-dialysis day)', de: 'Gestern (kein Dialysetag)' },
@@ -553,13 +540,6 @@ function ClinicalDataForm({
   )
 }
 
-const RECOVERY_OPTIONS = ['0-2h', '3-6h', '7-12h', '>12h'] as const
-const RECOVERY_LABELS: Record<string, Record<Lang, string>> = {
-  '0-2h':  { de: '0–2 Std.', en: '0–2 h' },
-  '3-6h':  { de: '3–6 Std.', en: '3–6 h' },
-  '7-12h': { de: '7–12 Std.', en: '7–12 h' },
-  '>12h':  { de: '>12 Std.', en: '>12 h' },
-}
 
 // ── PromEntryModal ────────────────────────────────────────────────────────────
 function PromEntryModal({ patient, timepoint, lang, onClose, onSaved }: {
@@ -623,7 +603,7 @@ function PromEntryModal({ patient, timepoint, lang, onClose, onSaved }: {
           {questions.map((q) => (
             <div key={q.key}>
               <p className="text-sm font-semibold text-slate-700 mb-0.5">{q.label}</p>
-              <p className="text-xs text-slate-400 mb-2">{q.sub}</p>
+              <p className="text-xs text-slate-400 mb-2">{q.sublabel}</p>
               <div className="flex gap-2">
                 {([1, 2, 3, 4, 5] as const).map((grade) => {
                   const selected = scores[q.key] === grade
