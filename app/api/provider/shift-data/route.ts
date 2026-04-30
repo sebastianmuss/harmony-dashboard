@@ -105,7 +105,7 @@ export async function GET() {
     return {
       id: patient.id,
       patientCode: patient.patientCode,
-      name: patient.nameEncrypted ? decrypt(patient.nameEncrypted) : null,
+      name: session.user.role === 'provider' && patient.nameEncrypted ? decrypt(patient.nameEncrypted) : null,
       center: patient.center,
       shiftName: patient.shift.name,
       schedule: patient.dialysisSchedule,

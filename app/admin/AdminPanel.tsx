@@ -9,7 +9,6 @@ import Link from 'next/link'
 import clsx from 'clsx'
 import { format, parseISO } from 'date-fns'
 import { loess } from '@/lib/loess'
-import { checkPassword, PASSWORD_RULES_DE, PASSWORD_RULES_EN } from '@/lib/password'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Lang = 'en' | 'de'
@@ -76,7 +75,7 @@ interface DashboardData {
   shiftStats: { shiftId: number; shiftName: string; schedule: string; patients: number; totalResponses: number; uniqueSubmitters: number; completionPct: number }[]
 }
 
-type Tab = 'dashboard' | 'patients' | 'providers' | 'config' | 'import' | 'usage' | 'verlauf' | 'sessions'
+type Tab = 'dashboard' | 'patients' | 'providers' | 'config' | 'usage' | 'verlauf' | 'sessions'
 
 // ── Small components ──────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, color = 'blue' }: { label: string; value: string | number; sub?: string; color?: string }) {
@@ -104,6 +103,40 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl">×</button>
         </div>
         <div className="px-6 py-4">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function TokenModal({ code, expiry, label, lang, onClose }: { code: string; expiry: string; label: string; lang: Lang; onClose: () => void }) {
+  const expires = new Date(expiry)
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+        <div>
+          <h3 className="text-lg font-bold text-slate-800">
+            {lang === 'de' ? 'Einmalcode für' : 'One-time code for'}: <span className="font-mono text-blue-700">{label}</span>
+          </h3>
+          <p className="text-sm text-slate-500 mt-1">
+            {lang === 'de'
+              ? 'Diesen Code dem Benutzer mitteilen. Er wird nur einmal angezeigt und ist 4 Stunden gültig.'
+              : 'Share this code with the user. It is shown only once and valid for 4 hours.'}
+          </p>
+        </div>
+        <div className="bg-slate-50 border-2 border-slate-200 rounded-xl p-4 text-center">
+          <p className="font-mono text-3xl font-bold tracking-widest text-slate-800 select-all">{code}</p>
+          <p className="text-xs text-slate-500 mt-2">
+            {lang === 'de' ? 'Gültig bis' : 'Valid until'}: {expires.toLocaleString()}
+          </p>
+        </div>
+        <p className="text-xs text-slate-500">
+          {lang === 'de'
+            ? 'Der Benutzer öffnet /reset und gibt diesen Code zusammen mit seiner Kennung ein.'
+            : 'The user opens /reset and enters this code together with their identifier.'}
+        </p>
+        <button onClick={onClose} className="w-full py-2.5 rounded-lg bg-blue-700 text-white font-semibold hover:bg-blue-800">
+          {lang === 'de' ? 'Verstanden' : 'Done'}
+        </button>
       </div>
     </div>
   )
@@ -214,7 +247,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   const [editPatient, setEditPatient] = useState<Patient | null>(null)
   const [search, setSearch] = useState('')
   const [form, setForm] = useState({
-    patientCode: '', name: '', pin: '', confirmPin: '', shiftId: '', center: 'Feldbach',
+    shiftId: '', center: 'Feldbach',
     dialysisSchedule: 'MWF', customDialysisDays: '',
     enrollmentDate: '', dryWeight: '', notes: '',
   })
@@ -222,6 +255,8 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   const [error, setError] = useState<string | null>(null)
   const [filterActive, setFilterActive] = useState(true)
   const [centerFilter, setCenterFilter] = useState<string>('all')
+  const [tokenDisplay, setTokenDisplay] = useState<{ code: string; expiry: string; label: string } | null>(null)
+  const [resetingToken, setResetingToken] = useState(false)
 
   const loadPatients = useCallback(async () => {
     const res = await fetch('/api/patients')
@@ -233,7 +268,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   useEffect(() => { loadPatients() }, [loadPatients])
 
   function openAdd() {
-    setForm({ patientCode: '', name: '', pin: '', confirmPin: '', shiftId: shifts[0]?.id.toString() ?? '', center: 'Feldbach', dialysisSchedule: 'MWF', customDialysisDays: '', enrollmentDate: new Date().toISOString().slice(0, 10), dryWeight: '', notes: '' })
+    setForm({ shiftId: shifts[0]?.id.toString() ?? '', center: 'Feldbach', dialysisSchedule: 'MWF', customDialysisDays: '', enrollmentDate: new Date().toISOString().slice(0, 10), dryWeight: '', notes: '' })
     setEditPatient(null)
     setShowAdd(true)
     setError(null)
@@ -241,9 +276,6 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
 
   function openEdit(patient: Patient) {
     setForm({
-      patientCode: patient.patientCode,
-      name: (patient as any).name ?? '',
-      pin: '', confirmPin: '',
       shiftId: patient.shiftId.toString(),
       center: patient.center,
       dialysisSchedule: patient.dialysisSchedule,
@@ -266,11 +298,6 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   async function savePatient() {
     setSaving(true)
     setError(null)
-    const needsPwCheck = !editPatient || form.pin.length > 0
-    if (needsPwCheck) {
-      if (!editPatient && form.pin.length === 0) { setError(lang === 'de' ? 'Bitte ein Passwort eingeben' : 'Please enter a password'); setSaving(false); return }
-      if (form.pin !== form.confirmPin) { setError(lang === 'de' ? 'Passwörter stimmen nicht überein' : 'Passwords do not match'); setSaving(false); return }
-    }
     try {
       const schedulePayload = {
         dialysisSchedule: form.dialysisSchedule,
@@ -278,8 +305,6 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
       }
       if (editPatient) {
         const body: Record<string, unknown> = {
-          patientCode: form.patientCode.toUpperCase(),
-          name: form.name || null,
           shiftId: parseInt(form.shiftId),
           center: form.center,
           ...schedulePayload,
@@ -287,23 +312,26 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
           dryWeight: form.dryWeight || null,
           notes: form.notes || null,
         }
-        if (form.pin) body.pin = form.pin
         const res = await fetch(`/api/patients/${editPatient.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
         if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+        setShowAdd(false)
+        loadPatients()
       } else {
         const res = await fetch('/api/patients', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ patientCode: form.patientCode.toUpperCase(), name: form.name || null, pin: form.pin, shiftId: parseInt(form.shiftId), center: form.center, ...schedulePayload, enrollmentDate: form.enrollmentDate, notes: form.notes || null }),
+          body: JSON.stringify({ shiftId: parseInt(form.shiftId), center: form.center, ...schedulePayload, enrollmentDate: form.enrollmentDate, notes: form.notes || null }),
         })
         if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+        const data = await res.json()
+        setShowAdd(false)
+        loadPatients()
+        if (data.resetCode) setTokenDisplay({ code: data.resetCode, expiry: data.resetExpiry, label: data.patientCode ?? '' })
       }
-      setShowAdd(false)
-      loadPatients()
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -383,7 +411,6 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-mono font-bold text-blue-700">{p.patientCode}</p>
-                  {(p as any).name && <p className="text-sm text-slate-700 font-medium">{(p as any).name}</p>}
                   <p className="text-xs text-slate-500 mt-0.5">{p.center} · {p.shift.name} · {scheduleLabel(p)}</p>
                   <p className={clsx('text-xs mt-1', promColor)}>
                     {lang === 'de' ? 'Letzte PROM: ' : 'Last PROM: '}
@@ -426,10 +453,7 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
           <tbody>
             {filteredPatients.map((p) => (
               <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50">
-                <td className="py-2.5 px-4">
-                  <span className="font-mono font-semibold text-blue-700">{p.patientCode}</span>
-                  {(p as any).name && <p className="text-xs text-slate-600 mt-0.5">{(p as any).name}</p>}
-                </td>
+                <td className="py-2.5 px-4 font-mono font-semibold text-blue-700">{p.patientCode}</td>
                 <td className="py-2.5 px-4 text-slate-600">{p.center}</td>
                 <td className="py-2.5 px-4 text-slate-500 text-xs">{scheduleLabel(p)}</td>
                 <td className="py-2.5 px-4 text-slate-500">{p.shift.name}</td>
@@ -472,59 +496,21 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
           onClose={() => setShowAdd(false)}
         >
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">
-                {lang === 'de' ? 'Patientencode * (HMY-XXXX)' : 'Patient Code * (HMY-XXXX)'}
-              </label>
-              <input value={form.patientCode} onChange={(e) => setForm((f) => ({ ...f, patientCode: e.target.value.toUpperCase() }))}
-                className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 font-mono focus:outline-none focus:border-blue-500" placeholder="HMY-0001" maxLength={8} />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">
-                {lang === 'de' ? 'Name (optional, verschlüsselt gespeichert)' : 'Name (optional, stored encrypted)'}
-              </label>
-              <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-                placeholder={lang === 'de' ? 'Vorname Nachname' : 'First Last'} />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">
-                {editPatient
-                  ? (lang === 'de' ? 'Neues Passwort (leer lassen = unverändert)' : 'New Password (leave blank to keep)')
-                  : (lang === 'de' ? 'Passwort *' : 'Password *')}
-              </label>
-              <input
-                type="password"
-                value={form.pin} onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value }))}
-                className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-                placeholder="••••••••••••"
-              />
-              {form.pin.length > 0 && (() => {
-                const checks = checkPassword(form.pin)
-                const rules = lang === 'de' ? PASSWORD_RULES_DE : PASSWORD_RULES_EN
-                return (
-                  <ul className="mt-1.5 space-y-0.5">
-                    {rules.map((r) => (
-                      <li key={r.key} className={clsx('text-xs flex items-center gap-1', checks[r.key] ? 'text-green-600' : 'text-slate-400')}>
-                        <span>{checks[r.key] ? '✓' : '○'}</span>{r.label}
-                      </li>
-                    ))}
-                  </ul>
-                )
-              })()}
-            </div>
-            {(!editPatient || form.pin.length > 0) && (
-              <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1">
-                  {lang === 'de' ? 'Passwort bestätigen *' : 'Confirm Password *'}
-                </label>
-                <input
-                  type="password"
-                  value={form.confirmPin} onChange={(e) => setForm((f) => ({ ...f, confirmPin: e.target.value }))}
-                  className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-                  placeholder="••••••••••••"
-                />
+            {editPatient && (
+              <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+                <span className="text-xs text-slate-500 font-semibold uppercase tracking-wide">
+                  {lang === 'de' ? 'Patientencode' : 'Patient Code'}
+                </span>
+                <span className="font-mono font-bold text-blue-700">{editPatient.patientCode}</span>
+                <span className="text-xs text-slate-400 ml-auto">{lang === 'de' ? 'nicht änderbar' : 'read-only'}</span>
               </div>
+            )}
+            {!editPatient && (
+              <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
+                {lang === 'de'
+                  ? 'Patientencode wird automatisch vergeben (HMY-XXXX).'
+                  : 'Patient code will be assigned automatically (HMY-XXXX).'}
+              </p>
             )}
             <div>
               <label className="block text-sm font-semibold text-slate-600 mb-1">
@@ -602,6 +588,28 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
               <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                 className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 resize-none" rows={2} />
             </div>
+            {editPatient && (
+              <div className="border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  disabled={resetingToken}
+                  onClick={async () => {
+                    setResetingToken(true)
+                    try {
+                      const res = await fetch(`/api/patients/${editPatient.id}/reset-token`, { method: 'POST' })
+                      const data = await res.json()
+                      if (res.ok) setTokenDisplay({ code: data.code, expiry: data.expiry, label: editPatient.patientCode })
+                      else setError(data.error)
+                    } finally { setResetingToken(false) }
+                  }}
+                  className="w-full py-2 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-semibold disabled:opacity-50"
+                >
+                  {resetingToken
+                    ? (lang === 'de' ? 'Generiert…' : 'Generating…')
+                    : (lang === 'de' ? 'Einmalcode für Passwortzurücksetzung' : 'Generate password reset code')}
+                </button>
+              </div>
+            )}
             {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg p-3">{error}</p>}
             <div className="flex gap-3 pt-2">
               <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-semibold">
@@ -612,11 +620,20 @@ function PatientsTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
                   ? (lang === 'de' ? 'Speichert…' : 'Saving…')
                   : editPatient
                   ? (lang === 'de' ? 'Aktualisieren' : 'Update')
-                  : (lang === 'de' ? 'Patient anlegen' : 'Create Patient')}
+                  : (lang === 'de' ? 'Patient anlegen + Code' : 'Create Patient + Code')}
               </button>
             </div>
           </div>
         </Modal>
+      )}
+      {tokenDisplay && (
+        <TokenModal
+          code={tokenDisplay.code}
+          expiry={tokenDisplay.expiry}
+          label={tokenDisplay.label}
+          lang={lang}
+          onClose={() => setTokenDisplay(null)}
+        />
       )}
     </div>
   )
@@ -628,10 +645,12 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [editProvider, setEditProvider] = useState<Provider | null>(null)
-  const [form, setForm] = useState({ name: '', username: '', password: '', confirmPassword: '', role: 'provider', shiftId: '', center: 'Feldbach' })
+  const [form, setForm] = useState({ name: '', username: '', role: 'provider', center: 'Feldbach' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchProvider, setSearchProvider] = useState('')
+  const [tokenDisplay, setTokenDisplay] = useState<{ code: string; expiry: string; label: string } | null>(null)
+  const [resetingToken, setResetingToken] = useState(false)
 
   const loadProviders = useCallback(async () => {
     const res = await fetch('/api/providers')
@@ -643,14 +662,14 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
   useEffect(() => { loadProviders() }, [loadProviders])
 
   function openAdd() {
-    setForm({ name: '', username: '', password: '', confirmPassword: '', role: 'provider', shiftId: shifts[0]?.id.toString() ?? '', center: 'Feldbach' })
+    setForm({ name: '', username: '', role: 'provider', center: 'Feldbach' })
     setEditProvider(null)
     setShowAdd(true)
     setError(null)
   }
 
   function openEdit(p: Provider) {
-    setForm({ name: p.name, username: p.username, password: '', confirmPassword: '', role: p.role, shiftId: p.shiftId?.toString() ?? '', center: p.center ?? 'Feldbach' })
+    setForm({ name: p.name, username: p.username, role: p.role, center: p.center ?? 'Feldbach' })
     setEditProvider(p)
     setShowAdd(true)
     setError(null)
@@ -658,35 +677,26 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
 
   async function saveProvider() {
     setError(null)
-    // Client-side password validation
-    const needsPwCheck = !editProvider || form.password.length > 0
-    if (needsPwCheck) {
-      if (form.password !== form.confirmPassword) {
-        setError(lang === 'de' ? 'Passwörter stimmen nicht überein' : 'Passwords do not match')
-        return
-      }
-      if (!editProvider && form.password.length === 0) {
-        setError(lang === 'de' ? 'Bitte ein Passwort eingeben' : 'Please enter a password')
-        return
-      }
-    }
     setSaving(true)
     try {
       if (editProvider) {
-        const body: Record<string, unknown> = { name: form.name, role: form.role, shiftId: form.shiftId ? parseInt(form.shiftId) : null, center: form.role === 'provider' ? form.center : null }
-        if (form.password) body.password = form.password
+        const body: Record<string, unknown> = { name: form.name, role: form.role, center: form.role === 'provider' ? form.center : null }
         const res = await fetch(`/api/providers/${editProvider.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+        setShowAdd(false)
+        loadProviders()
       } else {
         const res = await fetch('/api/providers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: form.name, username: form.username, password: form.password, role: form.role, shiftId: form.shiftId ? parseInt(form.shiftId) : null, center: form.role === 'provider' ? form.center : null }),
+          body: JSON.stringify({ name: form.name, username: form.username, role: form.role, center: form.role === 'provider' ? form.center : null }),
         })
         if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+        const data = await res.json()
+        setShowAdd(false)
+        loadProviders()
+        if (data.resetCode) setTokenDisplay({ code: data.resetCode, expiry: data.resetExpiry, label: form.name || form.username })
       }
-      setShowAdd(false)
-      loadProviders()
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -737,11 +747,7 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
                 {p.role === 'admin' ? 'Admin' : (lang === 'de' ? 'Mitarbeiter' : 'Provider')}
               </span>
             </div>
-            {(p.center || p.shift) && (
-              <p className="text-xs text-slate-500">
-                {[p.center, p.shift?.name].filter(Boolean).join(' · ')}
-              </p>
-            )}
+            {p.center && <p className="text-xs text-slate-500">{p.center}</p>}
             <div className="flex items-center justify-between pt-1">
               <span className={clsx('text-xs font-semibold', p.isActive ? 'text-green-600' : 'text-slate-400')}>
                 {p.isActive ? (lang === 'de' ? 'Aktiv' : 'Active') : (lang === 'de' ? 'Inaktiv' : 'Inactive')}
@@ -764,7 +770,6 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
               <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Benutzername' : 'Username'}</th>
               <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Rolle' : 'Role'}</th>
               <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Zentrum' : 'Center'}</th>
-              <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Schicht' : 'Shift'}</th>
               <th className="py-3 px-4 font-semibold">Status</th>
               <th className="py-3 px-4 font-semibold">{lang === 'de' ? 'Aktionen' : 'Actions'}</th>
             </tr>
@@ -780,7 +785,6 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
                   </span>
                 </td>
                 <td className="py-2.5 px-4 text-slate-500">{p.center ?? '—'}</td>
-                <td className="py-2.5 px-4 text-slate-500">{p.shift?.name ?? '—'}</td>
                 <td className="py-2.5 px-4">
                   <span className={clsx('text-xs font-semibold', p.isActive ? 'text-green-600' : 'text-slate-400')}>
                     {p.isActive ? (lang === 'de' ? 'Aktiv' : 'Active') : (lang === 'de' ? 'Inaktiv' : 'Inactive')}
@@ -824,44 +828,6 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
             )}
             <div>
               <label className="block text-sm font-semibold text-slate-600 mb-1">
-                {editProvider
-                  ? (lang === 'de' ? 'Neues Passwort (leer lassen = unverändert)' : 'New Password (leave blank to keep)')
-                  : (lang === 'de' ? 'Passwort *' : 'Password *')}
-              </label>
-              <input type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" placeholder="••••••••" />
-              {/* Live requirements — show when a password is being typed */}
-              {form.password.length > 0 && (() => {
-                const checks = checkPassword(form.password)
-                const rules = lang === 'de' ? PASSWORD_RULES_DE : PASSWORD_RULES_EN
-                return (
-                  <ul className="mt-2 space-y-0.5">
-                    {rules.map((r) => (
-                      <li key={r.key} className={clsx('text-xs flex items-center gap-1.5', checks[r.key] ? 'text-green-600' : 'text-slate-400')}>
-                        <span>{checks[r.key] ? '✓' : '○'}</span> {r.label}
-                      </li>
-                    ))}
-                  </ul>
-                )
-              })()}
-            </div>
-            {/* Confirm password — show when a password is being entered */}
-            {(!editProvider || form.password.length > 0) && (
-              <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1">
-                  {lang === 'de' ? 'Passwort bestätigen *' : 'Confirm Password *'}
-                </label>
-                <input type="password" value={form.confirmPassword} onChange={(e) => setForm((f) => ({ ...f, confirmPassword: e.target.value }))}
-                  className={clsx('w-full border-2 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500',
-                    form.confirmPassword.length > 0 && form.password !== form.confirmPassword ? 'border-red-400' : 'border-slate-200'
-                  )} placeholder="••••••••" />
-                {form.confirmPassword.length > 0 && form.password !== form.confirmPassword && (
-                  <p className="text-xs text-red-500 mt-1">{lang === 'de' ? 'Passwörter stimmen nicht überein' : 'Passwords do not match'}</p>
-                )}
-              </div>
-            )}
-            <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">
                 {lang === 'de' ? 'Rolle *' : 'Role *'}
               </label>
               <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
@@ -871,27 +837,37 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
               </select>
             </div>
             {form.role === 'provider' && (
-              <>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1">
-                    {lang === 'de' ? 'Zentrum *' : 'Center *'}
-                  </label>
-                  <select value={form.center} onChange={(e) => setForm((f) => ({ ...f, center: e.target.value }))}
-                    className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
-                    {CENTERS.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1">
-                    {lang === 'de' ? 'Zugewiesene Schicht' : 'Assigned Shift'}
-                  </label>
-                  <select value={form.shiftId} onChange={(e) => setForm((f) => ({ ...f, shiftId: e.target.value }))}
-                    className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
-                    <option value="">{lang === 'de' ? '— Keine Schicht —' : '— No shift —'}</option>
-                    {shifts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
-              </>
+              <div>
+                <label className="block text-sm font-semibold text-slate-600 mb-1">
+                  {lang === 'de' ? 'Zentrum *' : 'Center *'}
+                </label>
+                <select value={form.center} onChange={(e) => setForm((f) => ({ ...f, center: e.target.value }))}
+                  className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+                  {CENTERS.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            )}
+            {editProvider && (
+              <div className="border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  disabled={resetingToken}
+                  onClick={async () => {
+                    setResetingToken(true)
+                    try {
+                      const res = await fetch(`/api/providers/${editProvider.id}/reset-token`, { method: 'POST' })
+                      const data = await res.json()
+                      if (res.ok) setTokenDisplay({ code: data.code, expiry: data.expiry, label: editProvider.name })
+                      else setError(data.error)
+                    } finally { setResetingToken(false) }
+                  }}
+                  className="w-full py-2 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-semibold disabled:opacity-50"
+                >
+                  {resetingToken
+                    ? (lang === 'de' ? 'Generiert…' : 'Generating…')
+                    : (lang === 'de' ? 'Einmalcode für Passwortzurücksetzung' : 'Generate password reset code')}
+                </button>
+              </div>
             )}
             {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg p-3">{error}</p>}
             <div className="flex gap-3 pt-2">
@@ -903,11 +879,20 @@ function ProvidersTab({ shifts, lang }: { shifts: Shift[]; lang: Lang }) {
                   ? (lang === 'de' ? 'Speichert…' : 'Saving…')
                   : editProvider
                   ? (lang === 'de' ? 'Aktualisieren' : 'Update')
-                  : (lang === 'de' ? 'Mitarbeiter anlegen' : 'Create Provider')}
+                  : (lang === 'de' ? 'Mitarbeiter anlegen + Code' : 'Create Provider + Code')}
               </button>
             </div>
           </div>
         </Modal>
+      )}
+      {tokenDisplay && (
+        <TokenModal
+          code={tokenDisplay.code}
+          expiry={tokenDisplay.expiry}
+          label={tokenDisplay.label}
+          lang={lang}
+          onClose={() => setTokenDisplay(null)}
+        />
       )}
     </div>
   )
@@ -1227,14 +1212,14 @@ function UsageTab({ lang, siteFilter }: { lang: Lang; siteFilter: string }) {
         <h3 className="font-semibold text-slate-700 mb-3 text-sm">
           {lang === 'de' ? 'Tägliche Aktivität (letzte 30 Tage)' : 'Daily Activity (last 30 days)'}
         </h3>
-        <div className="flex items-end gap-0.5 h-24 w-full">
+        <div className="flex gap-0.5 h-24 w-full">
           {data.dailyActivity.map((d) => {
             const total = d.logins + d.proms + d.views
             const loginH = Math.round((d.logins / maxDaily) * 100)
             const promH  = Math.round((d.proms  / maxDaily) * 100)
             const viewH  = Math.round((d.views  / maxDaily) * 100)
             return (
-              <div key={d.date} className="flex-1 flex flex-col justify-end gap-0" title={`${d.date}\n${lang === 'de' ? 'Logins' : 'Logins'}: ${d.logins}\nPROMs: ${d.proms}\n${lang === 'de' ? 'Ansichten' : 'Views'}: ${d.views}`}>
+              <div key={d.date} className="flex-1 h-full flex flex-col justify-end gap-0" title={`${d.date}\n${lang === 'de' ? 'Logins' : 'Logins'}: ${d.logins}\nPROMs: ${d.proms}\n${lang === 'de' ? 'Ansichten' : 'Views'}: ${d.views}`}>
                 {viewH > 0  && <div style={{ height: `${viewH}%` }}  className="bg-amber-400 rounded-sm" />}
                 {promH > 0  && <div style={{ height: `${promH}%` }}  className="bg-green-500 rounded-sm" />}
                 {loginH > 0 && <div style={{ height: `${loginH}%` }} className="bg-blue-500 rounded-sm" />}
@@ -1755,7 +1740,6 @@ export default function AdminPanel({ adminName, adminUserId }: { adminName: stri
     { id: 'patients',  label: { en: 'Patients',      de: 'Patienten' } },
     { id: 'providers', label: { en: 'Providers',     de: 'Mitarbeiter' } },
     { id: 'config',    label: { en: 'Study Config',  de: 'Studien-Konfig' } },
-    { id: 'import',    label: { en: 'Import Data',   de: 'Datenimport' } },
     { id: 'usage',     label: { en: 'Usage',         de: 'Nutzung' } },
     { id: 'verlauf',   label: { en: 'Trends',        de: 'Verlauf' } },
     { id: 'sessions',  label: { en: 'Sessions',      de: 'Sitzungen' } },
@@ -1820,7 +1804,6 @@ export default function AdminPanel({ adminName, adminUserId }: { adminName: stri
         {tab === 'patients'  && <PatientsTab shifts={shifts} lang={lang} />}
         {tab === 'providers' && <ProvidersTab shifts={shifts} lang={lang} />}
         {tab === 'config'    && <ConfigTab lang={lang} />}
-        {tab === 'import'    && <ImportTab lang={lang} />}
         {tab === 'usage'     && <UsageTab lang={lang} siteFilter={siteFilter} />}
         {tab === 'verlauf'   && <VerlaufTab lang={lang} siteFilter={siteFilter} />}
         {tab === 'sessions'  && <><SessionsTab lang={lang} adminUserId={adminUserId} /><AuditIntegrityPanel lang={lang} /></>}

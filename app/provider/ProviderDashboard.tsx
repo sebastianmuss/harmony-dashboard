@@ -669,18 +669,34 @@ function PromEntryModal({ patient, timepoint, lang, onClose, onSaved }: {
 }
 
 // ── PatientCard ───────────────────────────────────────────────────────────────
-function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, onDataSaved }: {
+function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, role, onDataSaved }: {
   patient: PatientData
   today: string
   currentTimepoint: string | null
   studyStartDate: string | null
   lang: Lang
+  role: 'provider' | 'admin'
   onDataSaved: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [showClinicalForm, setShowClinicalForm] = useState(false)
   const [showPromEntry, setShowPromEntry] = useState(false)
   const [overriding, setOverriding] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [nameInput, setNameInput] = useState(patient.name ?? '')
+  const [savingName, setSavingName] = useState(false)
+
+  async function saveName() {
+    setSavingName(true)
+    await fetch(`/api/patients/${patient.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: nameInput.trim() || null }),
+    })
+    setSavingName(false)
+    setEditingName(false)
+    onDataSaved()
+  }
 
   const clinicalTodayLabel = lang === 'de' ? 'Klinische Daten heute' : 'Clinical Data Today'
   const enterPromLabel = patient.submittedToday
@@ -713,7 +729,35 @@ function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, o
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <div className="flex-1 min-w-0">
-              {patient.name && <p className="text-sm font-semibold text-slate-800 truncate">{patient.name}</p>}
+              {role === 'provider' ? (
+                editingName ? (
+                  <div className="flex items-center gap-1 mb-0.5" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      autoFocus
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditingName(false) }}
+                      className="text-sm border border-slate-300 rounded px-1.5 py-0.5 focus:outline-none focus:border-blue-400 w-full"
+                      placeholder={lang === 'de' ? 'Name eingeben…' : 'Enter name…'}
+                    />
+                    <button onClick={saveName} disabled={savingName} className="text-xs text-blue-700 font-semibold hover:underline shrink-0 disabled:opacity-50">
+                      {savingName ? '…' : 'Ok'}
+                    </button>
+                    <button onClick={() => setEditingName(false)} className="text-xs text-slate-400 hover:text-slate-600 shrink-0">✕</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setNameInput(patient.name ?? ''); setEditingName(true) }}
+                    className="group flex items-center gap-1 text-left w-full"
+                    title={lang === 'de' ? 'Name bearbeiten' : 'Edit name'}
+                  >
+                    {patient.name
+                      ? <span className="text-sm font-semibold text-slate-800 truncate">{patient.name}</span>
+                      : <span className="text-xs text-slate-400 italic">{lang === 'de' ? 'Name hinzufügen' : 'Add name'}</span>}
+                    <span className="text-slate-300 group-hover:text-slate-500 text-xs shrink-0">✎</span>
+                  </button>
+                )
+              ) : null}
               <p className="font-mono text-xs text-blue-700 truncate">{patient.patientCode}</p>
             </div>
             {patient.submittedToday && patient.todayProm && (
@@ -853,6 +897,107 @@ function PatientCard({ patient, today, currentTimepoint, studyStartDate, lang, o
   )
 }
 
+// ── ClinicalImportView ────────────────────────────────────────────────────────
+function ClinicalImportView({ lang }: { lang: Lang }) {
+  const [file, setFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [result, setResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function upload() {
+    if (!file) return
+    setUploading(true)
+    setResult(null)
+    setError(null)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await fetch('/api/provider/import', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setResult(data)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
+        <h3 className="font-bold text-slate-800 text-lg">
+          {lang === 'de' ? 'Klinische Daten importieren' : 'Import Clinical Data'}
+        </h3>
+        <p className="text-slate-500 text-sm">
+          {lang === 'de'
+            ? 'CSV-Datei mit Patientennamen hochladen. Die Zuordnung zu IDs erfolgt automatisch — Namen werden nicht gespeichert oder zurückgegeben.'
+            : 'Upload a CSV with patient names. Matching to IDs is done automatically — names are never stored or returned.'}
+        </p>
+        <div className="bg-slate-50 rounded-xl p-4 font-mono text-xs text-slate-600 overflow-x-auto">
+          <p className="font-semibold text-slate-700 mb-1 font-sans text-xs">
+            {lang === 'de' ? 'Erwartete Spalten (Kopfzeile erforderlich):' : 'Expected columns (header required):'}
+          </p>
+          <p>patient_name, date, pre_dialysis_weight, idwg, systolic_bp, diastolic_bp</p>
+          <p className="mt-2 text-slate-400 font-sans">
+            {lang === 'de'
+              ? 'Datumsformat: JJJJ-MM-TT · Klinische Spalten optional · Bestehende Zeilen werden aktualisiert.'
+              : 'Date format: YYYY-MM-DD · Clinical columns optional · Existing rows are updated (upsert).'}
+          </p>
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-slate-600 mb-2">
+            {lang === 'de' ? 'CSV-Datei auswählen' : 'Select CSV file'}
+          </label>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); setError(null) }}
+            className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 file:font-semibold hover:file:bg-blue-100 cursor-pointer"
+          />
+        </div>
+        {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg p-3">{error}</p>}
+        <button
+          onClick={upload}
+          disabled={!file || uploading}
+          className="w-full py-3 rounded-xl bg-blue-700 text-white font-semibold hover:bg-blue-800 disabled:opacity-40 transition"
+        >
+          {uploading
+            ? (lang === 'de' ? 'Importiert…' : 'Importing…')
+            : (lang === 'de' ? 'Hochladen & Importieren' : 'Upload & Import')}
+        </button>
+      </div>
+      {result && (
+        <div className="bg-white rounded-xl p-6 shadow-sm space-y-3">
+          <h4 className="font-bold text-slate-800">{lang === 'de' ? 'Ergebnis' : 'Result'}</h4>
+          <div className="flex gap-4">
+            <div className="bg-green-50 border border-green-200 rounded-xl px-5 py-3 text-center">
+              <p className="text-2xl font-black text-green-700">{result.imported}</p>
+              <p className="text-xs text-green-600 font-semibold">{lang === 'de' ? 'Importiert' : 'Imported'}</p>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 text-center">
+              <p className="text-2xl font-black text-amber-700">{result.skipped}</p>
+              <p className="text-xs text-amber-600 font-semibold">{lang === 'de' ? 'Übersprungen' : 'Skipped'}</p>
+            </div>
+          </div>
+          {result.errors.length > 0 && (
+            <div>
+              <p className="text-sm font-semibold text-red-600 mb-2">
+                {lang === 'de' ? `Hinweise (${result.errors.length}):` : `Notes (${result.errors.length}):`}
+              </p>
+              <div className="bg-red-50 rounded-xl p-3 max-h-48 overflow-y-auto space-y-1">
+                {result.errors.map((e, i) => (
+                  <p key={i} className="text-xs text-red-700 font-mono">{e}</p>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── ProviderDashboard ─────────────────────────────────────────────────────────
 export default function ProviderDashboard({ providerName, shiftName, role }: {
   providerName: string
@@ -864,7 +1009,7 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'submitted' | 'pending_hd'>('pending_hd')
   const [lang, setLang] = useState<Lang>('de')
-  const [view, setView] = useState<'patients' | 'verlauf'>('patients')
+  const [view, setView] = useState<'patients' | 'verlauf' | 'import'>('patients')
 
   const fetchData = useCallback(async () => {
     try {
@@ -970,6 +1115,12 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
                 >
                   {lang === 'de' ? 'Verlauf' : 'Trends'}
                 </button>
+                <button
+                  onClick={() => setView('import')}
+                  className={clsx('px-3 py-1.5 rounded-md text-sm font-semibold transition', view === 'import' ? 'bg-blue-700 text-white' : 'text-slate-500 hover:text-slate-800')}
+                >
+                  {lang === 'de' ? 'Import' : 'Import'}
+                </button>
               </div>
               {view === 'patients' && (
                 <>
@@ -991,6 +1142,7 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
             </div>
 
             {view === 'verlauf' && <ProviderVerlaufView lang={lang} />}
+            {view === 'import'  && <ClinicalImportView lang={lang} />}
 
             <div className={clsx('space-y-4', view !== 'patients' && 'hidden')}>
               {filteredPatients.length === 0 && (
@@ -1016,6 +1168,7 @@ export default function ProviderDashboard({ providerName, shiftName, role }: {
                         currentTimepoint={data.currentTimepoint}
                         studyStartDate={data.studyStartDate}
                         lang={lang}
+                        role={role}
                         onDataSaved={fetchData}
                       />
                     ))}

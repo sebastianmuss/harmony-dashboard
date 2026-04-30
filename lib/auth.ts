@@ -14,7 +14,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     authorized({ auth: session, request: { nextUrl } }) {
       const isLoggedIn = !!session?.user
       const path = nextUrl.pathname
-      const isPublic = path === '/' || path === '/login' || path.startsWith('/api/auth/')
+      const isPublic = path === '/' || path === '/login' || path === '/reset' || path.startsWith('/api/auth/') || path === '/api/reset-password'
       if (isPublic) return true
       if (!isLoggedIn) {
         if (path.startsWith('/api/')) {

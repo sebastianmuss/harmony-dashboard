@@ -101,6 +101,8 @@ model Patient {
   nameEncrypted       String?            // AES-256-GCM encrypted display name
   pin                 String    @unique  // patient password, stored as bcrypt hash
   pinIndexHash        String?   @unique  // legacy field — no longer used
+  resetToken          String?   @unique  // SHA-256 hash of one-time reset code
+  resetTokenExpiry    DateTime?          // code expires after this time
   shiftId             Int
   center              String    @default("Feldbach")  // "Feldbach" | "Vienna"
   dialysisSchedule    String    @default("MWF")       // "MWF" | "TThS" | "custom"
@@ -126,13 +128,15 @@ model Provider {
   id           Int      @id @default(autoincrement())
   name         String
   username     String   @unique
-  passwordHash String
-  role         String   // "admin" | "provider"
-  shiftId      Int?     // null for admins
-  center       String?  // "Feldbach" | "Vienna" — null means access to all centers (admins)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  passwordHash     String
+  role             String    // "admin" | "provider"
+  shiftId          Int?      // null for admins
+  center           String?   // "Feldbach" | "Vienna" — null means access to all centers (admins)
+  isActive         Boolean   @default(true)
+  resetToken       String?   @unique  // SHA-256 hash of one-time reset code
+  resetTokenExpiry DateTime?           // code expires after this time
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   shift        Shift?   @relation(fields: [shiftId], references: [id])
 

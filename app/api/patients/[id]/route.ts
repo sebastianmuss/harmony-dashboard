@@ -9,7 +9,7 @@ import { writeAudit, getIp } from '@/lib/audit'
 // ── PATCH /api/patients/[id] ──────────────────────────────────────────────────
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
-  if (!session || session.user.role !== 'admin') {
+  if (!session || !['admin', 'provider'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -18,17 +18,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json()
 
   const update: Record<string, unknown> = {}
-  if (body.patientCode !== undefined) update.patientCode = body.patientCode.toUpperCase()
-  if (body.shiftId !== undefined) update.shiftId = body.shiftId
-  if (body.center !== undefined) update.center = body.center
-  if (body.dialysisSchedule !== undefined) update.dialysisSchedule = body.dialysisSchedule
-  if (body.customDialysisDays !== undefined) update.customDialysisDays = body.customDialysisDays ?? null
-  if (body.enrollmentDate !== undefined) update.enrollmentDate = new Date(body.enrollmentDate)
-  if (body.isActive !== undefined) update.isActive = body.isActive
-  if (body.droppedOutAt !== undefined) update.droppedOutAt = body.droppedOutAt ? new Date(body.droppedOutAt) : null
-  if (body.notes !== undefined) update.notes = body.notes
-  if (body.name !== undefined) update.nameEncrypted = body.name ? encrypt(body.name) : null
-  if (body.dryWeight !== undefined) update.dryWeight = body.dryWeight ? parseFloat(body.dryWeight) : null
+
+  // Providers may only update the encrypted name field
+  if (session.user.role === 'provider') {
+    if (body.name !== undefined) update.nameEncrypted = body.name ? encrypt(body.name) : null
+  } else {
+    // patientCode is immutable — never accepted in updates
+    if (body.shiftId !== undefined) update.shiftId = body.shiftId
+    if (body.center !== undefined) update.center = body.center
+    if (body.dialysisSchedule !== undefined) update.dialysisSchedule = body.dialysisSchedule
+    if (body.customDialysisDays !== undefined) update.customDialysisDays = body.customDialysisDays ?? null
+    if (body.enrollmentDate !== undefined) update.enrollmentDate = new Date(body.enrollmentDate)
+    if (body.isActive !== undefined) update.isActive = body.isActive
+    if (body.droppedOutAt !== undefined) update.droppedOutAt = body.droppedOutAt ? new Date(body.droppedOutAt) : null
+    if (body.notes !== undefined) update.notes = body.notes
+    if (body.dryWeight !== undefined) update.dryWeight = body.dryWeight ? parseFloat(body.dryWeight) : null
+    // name (nameEncrypted) is intentionally excluded from admin path — only providers may set/change patient names
+  }
   if (body.pin !== undefined) {
     if (!isPasswordValid(body.pin)) {
       return NextResponse.json({ error: 'Password must be at least 12 characters and include upper, lower, digit, and special character.' }, { status: 400 })
@@ -58,7 +64,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     ip: getIp(req),
   })
 
-  return NextResponse.json({ ...safePatient, name: nameEncrypted ? decrypt(nameEncrypted) : null })
+  // Admins never receive the decrypted name
+  const responseName = session.user.role === 'provider' && nameEncrypted ? decrypt(nameEncrypted) : null
+  return NextResponse.json({ ...safePatient, name: responseName })
 }
 
 // ── DELETE /api/patients/[id] — soft delete (deactivate) ─────────────────────

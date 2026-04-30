@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
+import { randomUUID } from 'crypto'
 import { writeAudit, getIp } from '@/lib/audit'
+import { generateResetToken } from '@/lib/token'
 import { z } from 'zod'
 import { isPasswordValid } from '@/lib/password'
 
@@ -11,7 +13,7 @@ const CreateProviderSchema = z.object({
   username: z.string().min(3).max(100),
   password: z.string().min(12).max(128).refine(isPasswordValid, {
     message: 'Password must be at least 12 characters and include uppercase, lowercase, digit, and special character',
-  }),
+  }).optional(),
   role:     z.enum(['provider', 'admin']),
   shiftId:  z.number().int().positive().nullable().optional(),
   center:   z.string().max(100).nullable().optional(),
@@ -51,12 +53,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Username already taken' }, { status: 409 })
   }
 
-  const passwordHash = await bcrypt.hash(password, 12)
+  // If admin doesn't provide a password, create a locked (unusable) hash — user must set via reset token
+  const passwordHash = password ? await bcrypt.hash(password, 12) : await bcrypt.hash(randomUUID(), 12)
 
   const provider = await prisma.provider.create({
     data: { name, username, passwordHash, role, shiftId: shiftId ?? null, center: center ?? null },
     include: { shift: { select: { name: true } } },
   })
+
+  // Auto-generate a one-time reset token so admin can hand it to the provider immediately
+  const { code, hash: tokenHash, expiry } = generateResetToken()
+  await prisma.provider.update({ where: { id: provider.id }, data: { resetToken: tokenHash, resetTokenExpiry: expiry } })
 
   const { passwordHash: _h, ...safeProvider } = provider
 
@@ -70,5 +77,5 @@ export async function POST(req: NextRequest) {
     ip: getIp(req),
   })
 
-  return NextResponse.json(safeProvider, { status: 201 })
+  return NextResponse.json({ ...safeProvider, resetCode: code, resetExpiry: expiry.toISOString() }, { status: 201 })
 }

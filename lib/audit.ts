@@ -21,7 +21,7 @@ function stableStringify(value: unknown): string {
 export interface AuditEntry {
   actorType: string
   actorId?: number | null
-  action: 'create' | 'update' | 'delete' | 'view' | 'export' | 'import' | 'failed_login'
+  action: 'create' | 'update' | 'delete' | 'view' | 'export' | 'import' | 'failed_login' | 'reset_token'
   resource: string
   resourceId?: number | null
   changes?: Record<string, unknown>

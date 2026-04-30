@@ -142,6 +142,11 @@ export default function LoginPage() {
               className="w-full h-14 rounded-2xl bg-blue-700 text-white text-xl font-bold hover:bg-blue-800 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
               {loading ? (lang === 'de' ? 'Anmeldung…' : 'Signing in…') : (lang === 'de' ? 'Anmelden' : 'Sign In')}
             </button>
+            <p className="text-center text-sm text-slate-400">
+              <a href="/reset" className="hover:text-blue-600 transition">
+                {lang === 'de' ? 'Passwort zurücksetzen' : 'Reset password'}
+              </a>
+            </p>
           </form>
         )}
 
@@ -193,6 +198,11 @@ export default function LoginPage() {
               className="w-full h-14 rounded-2xl bg-blue-700 text-white text-xl font-bold hover:bg-blue-800 transition-all disabled:opacity-40">
               {loading ? (lang === 'de' ? 'Anmeldung…' : 'Signing in…') : (lang === 'de' ? 'Anmelden' : 'Sign In')}
             </button>
+            <p className="text-center text-sm text-slate-400">
+              <a href="/reset" className="hover:text-blue-600 transition">
+                {lang === 'de' ? 'Passwort zurücksetzen' : 'Reset password'}
+              </a>
+            </p>
           </form>
         )}
       </div>
